@@ -26,6 +26,8 @@ Thumbs.db
 
 
 # --- Input data: download separately (see README) ---
+/analysis-data.tar.gz
+/reconstruction-data.tar.gz
 datasets/aidev/*
 !datasets/aidev/.gitkeep
 datasets/raw/*

@@ -1,4 +1,4 @@
-# Tested with Python 3.13 (pinned versions below have binary wheels for 3.13).
+# Dependencies for Python 3.13.
 # Core analysis
 pandas==3.0.1
 numpy==2.4.2
@@ -19,7 +19,7 @@ gawd==1.1.1
 ruamel.yaml==0.19.1
 
 # Notebook execution
-jupyter
+jupyter==1.1.1
 ipykernel==7.2.0
 nbconvert==7.17.0
 nbclient==0.10.4

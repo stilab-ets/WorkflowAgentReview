@@ -1,116 +1,146 @@
 # Replication Package: GitHub Actions Workflow Changes
 
-This repository contains the data, Jupyter notebooks, scripts, and figures for an empirical study of 522 GitHub Actions workflow pull requests from 101 repositories.
+## 1. Installation
 
-The study compares:
+### 1.1 Install packages
 
-- 264 AI-agent pull requests (APRs)
-- 258 human-authored pull requests (HPRs)
-
-## Setup
-
-Python 3.13 is recommended.
-
-The analyses are implemented as Jupyter notebooks. Before running them, install the notebook and analysis packages listed in `requirements.txt`:
+Use Python 3.13. Run from the repository root:
 
 ```bash
-python3.13 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-On Windows, activate the environment with:
+### 1.2 Required AIDev dataset
 
-```powershell
-.venv\Scripts\activate
-```
+Use the study's AIDev-Pop snapshot from [AIDev](https://huggingface.co/datasets/hao-li/AIDev/blob/main/README.md). Place the seven Parquet files listed below in `datasets/aidev/`. The exact upstream revision used by this study is not recorded; the latest release may differ. The notebooks expect the study filename `pr_review_comments_v2.parquet`.
 
-The requirements file installs Jupyter and the packages needed for data analysis, statistics, plotting, and GitHub Actions workflow analysis.
+Large Parquet, JSONL, and processed CSV files are excluded from Git and must be obtained separately.
 
-## Run the Analysis
+### 1.3 Generate processed data
 
-Start Jupyter from the project root:
+Create the directories and start Jupyter:
 
 ```bash
+mkdir -p datasets/aidev datasets/raw datasets/processed/rq1 datasets/processed/rq2 datasets/processed/rq3 figures/rq4
 jupyter notebook
 ```
 
-Open and run these notebooks in order:
+Follow one execution flow in Section 4. RQ1 notebooks 2–6 generate the processed CSVs; AIDev files alone are insufficient because the notebooks also read GitHub JSONL data and archived intermediate files.
 
-| Research question | Notebook |
+## 2. Datasets
+
+**AIDev inputs — `datasets/aidev/`**
+
+| File | Description |
 |---|---|
-| RQ1: Review effort and acceptance | `rq1/6-metrics.ipynb`, then `rq1/7-statistics.ipynb` |
-| RQ2: Cross-agent comparison | `rq2/rq2_statistics.ipynb` |
-| RQ3: Syntactic workflow changes | `rq3/analysis_syntactic_entities.ipynb` |
-| RQ4: Workflow-change motivations | `rq4/thematic_analysis_results_statistics.ipynb` |
+| `pull_request.parquet` | AI-agent pull-request metadata. |
+| `pr_commits.parquet` | Commits associated with pull requests. |
+| `pr_commit_details.parquet` | Changed files and patches for each commit. |
+| `pr_reviews.parquet` | Pull-request reviews. |
+| `pr_review_comments_v2.parquet` | Inline review comments. |
+| `pr_comments.parquet` | Pull-request discussion comments. |
+| `issue.parquet` | GitHub issue records. |
 
-To execute all analysis notebooks from the command line:
+**Collected raw data — `datasets/raw/`**
 
-```bash
-jupyter nbconvert --to notebook --execute --inplace \
-  rq1/6-metrics.ipynb \
-  rq1/7-statistics.ipynb \
-  rq2/rq2_statistics.ipynb \
-  rq3/analysis_syntactic_entities.ipynb \
-  rq4/thematic_analysis_results_statistics.ipynb
-```
+| File | Description |
+|---|---|
+| `eligible_ai_pop_commits_metadata.jsonl` | GitHub metadata for the selected AI commits. |
+| `eligible_human_pop_prs_metadata.jsonl` | Human PR metadata, commits, changed files, reviews, and comments. |
+| `eligible_commits_check_runs.jsonl` | CI check runs for AI and human commits. |
 
-The earlier notebooks in `rq1/` document the historical data-construction process and are not required to reproduce the final analysis.
+**Processed data — paths relative to `datasets/processed/`**
 
-## Repository Contents
+| Files | Description |
+|---|---|
+| `fetched_eligible_pop_commits.csv` | Fetched AI commit records; also the input list for AI commit recollection. |
+| `ai_eligible_prs.csv`, `human_eligible_prs.csv` | Eligible pull-request metadata. |
+| `ai_eligible_fetched_commits.csv`, `human_eligible_commits.csv` | Commits belonging to eligible PRs. |
+| `ai_eligible_commit_details.csv`, `human_eligible_commit_details.csv` | File-level commit changes. |
+| `ai_eligible_reviews.csv`, `human_eligible_reviews.csv` | Review records. |
+| `ai_eligible_review_comments.csv`, `human_eligible_inline_reviews.csv` | Inline review comments. |
+| `ai_eligible_comments.csv`, `human_eligible_comments.csv` | Discussion comments. |
+| `eligible_pr_failure_rates.csv` | PR-level CI failure metrics. |
+| `rq1/all_eligible_prs.csv`, `rq1/all_eligible_commits.csv` | Sampled study PRs and their commits. |
+| `combined_metrics.csv` | Review-effort and acceptance metrics for the study sample. |
+| `rq1/shapiro_wilk_normality_tests.csv`, `rq1/review_effort_statistics.csv` | RQ1 normality tests and statistical summaries. |
+| `rq2/agent_median_metrics.csv` | Per-agent metric summaries. |
+| `rq3/diff_workflow_files.csv` | Manifest of workflow changes and before/after file paths. |
+| `rq3/diff_files/` | Archived workflow YAML snapshots, included in Git. |
+| `rq3/workflow_syntactic_entities.csv` | Syntactic entity changes extracted with GAWD. |
+| `rq3/rq3_entity_change_table.csv` | Grouped workflow-entity change frequencies. |
 
-### Data Collection Scripts
+**Other inputs included in Git**
 
-| Script | Generated outputs | Output type |
-|---|---|---|
-| `data_collection_scripts/fetch-ai-workflow-commits-meta.py` | `datasets/raw/eligible_ai_pop_commits_metadata.jsonl`<br>`datasets/raw/ai_workflow_commits_metadata_summary.json` | Dataset |
-| `data_collection_scripts/fetch-eligible-human-prs.py` | `datasets/raw/eligible_human_pop_prs_metadata.jsonl`<br>`datasets/raw/eligible_human_pop_prs_metadata_checkpoint.json`<br>`datasets/raw/eligible_human_pop_prs_metadata_summary.json` | Dataset |
-| `data_collection_scripts/fetch-eligible-commits-check-runs.py` | `datasets/raw/eligible_commits_check_runs_input.csv`<br>`datasets/raw/eligible_commits_check_runs.jsonl`<br>`datasets/raw/eligible_commits_check_runs_summary.json` | Dataset |
+| Files | Description |
+|---|---|
+| `data_collection_scripts/outputs/repos_with_status_code.json` | Historical repository availability checks used by RQ1 notebook 1. |
+| `rq4/annotation/rater1.csv`, `rq4/annotation/rater2.csv` | Independent annotation records. |
+| `rq4/annotation/disagreements.csv` | Stored annotation disagreements. |
+| `rq4/annotation/final_dataset_with_agreed_labels.csv` | Agreed labels used by the RQ4 analysis. |
 
-### RQ1 Notebooks
+## 3. Notebooks
 
-| Notebook | Generated outputs | Output type |
-|---|---|---|
-| `rq1/1-extract-ai-workflow-prs.ipynb` | No file output | — |
-| `rq1/2-extract-eligible-ai-commit-details.ipynb` | `datasets/processed/fetched_eligible_pop_commits.csv` | Dataset |
-| `rq1/3-extract-ai-eligible-prs.ipynb` | `datasets/processed/ai_eligible_prs.csv`<br>`datasets/processed/ai_eligible_fetched_commits.csv`<br>`datasets/processed/ai_eligible_commit_details.csv`<br>`datasets/processed/ai_eligible_reviews.csv`<br>`datasets/processed/ai_eligible_review_comments.csv`<br>`datasets/processed/ai_eligible_comments.csv` | Dataset |
-| `rq1/4-extract-eligible-human-prs.ipynb` | `datasets/processed/human_eligible_prs.csv`<br>`datasets/processed/human_eligible_commits.csv`<br>`datasets/processed/human_eligible_commit_details.csv`<br>`datasets/processed/human_eligible_reviews.csv`<br>`datasets/processed/human_eligible_inline_reviews.csv`<br>`datasets/processed/human_eligible_comments.csv` | Dataset |
-| `rq1/5-extract-check-runs.ipynb` | `datasets/processed/eligible_pr_failure_rates.csv` | Dataset |
-| `rq1/6-metrics.ipynb` | `datasets/processed/rq1/all_eligible_prs.csv`<br>`datasets/processed/rq1/all_eligible_commits.csv`<br>`datasets/processed/combined_metrics.csv` | Dataset |
-| `rq1/7-statistics.ipynb` | `datasets/processed/rq1/shapiro_wilk_normality_tests.csv`<br>`datasets/processed/rq1/review_effort_statistics.csv` | Dataset |
+| Notebook | Description |
+|---|---|
+| `rq1/1-extract-ai-workflow-prs.ipynb` | Identifies workflow-changing AI PR candidates; does not save a dataset. |
+| `rq1/2-extract-eligible-ai-commit-details.ipynb` | Converts fetched AI commit metadata into `fetched_eligible_pop_commits.csv`. |
+| `rq1/3-extract-ai-eligible-prs.ipynb` | Selects eligible AI PRs and exports their commits, file changes, reviews, and comments. |
+| `rq1/4-extract-eligible-human-prs.ipynb` | Filters collected human PRs and exports the corresponding datasets. |
+| `rq1/5-extract-check-runs.ipynb` | Calculates CI failure metrics for the supplied PR list. |
+| `rq1/6-metrics.ipynb` | Samples human PRs, combines both groups, and calculates review-effort and acceptance metrics. |
+| `rq1/7-statistics.ipynb` | Produces the RQ1 statistical comparisons. |
+| `rq2/rq2_statistics.ipynb` | Compares metrics across AI agents. |
+| `rq3/analysis_syntactic_entities.ipynb` | Summarizes workflow-entity changes by PR type and change operation. |
+| `rq4/thematic_analysis_results_statistics.ipynb` | Summarizes annotated workflow-change motivations. |
 
-### RQ2 Notebook
+## 4. Usage: Execution Flow
 
-| Notebook | Generated outputs | Output type |
-|---|---|---|
-| `rq2/rq2_statistics.ipynb` | `datasets/processed/rq2/agent_median_metrics.csv`<br>`figures/rq2_agent_all_metrics.pdf` | Dataset and figure |
+### 4.1 Raw data recollection
 
-### RQ3 Scripts
+Copy `.env.example` to `.env` in the repository root. The AI commit collector requires five distinct valid tokens; the human-PR and check-run collectors accept one token.
 
-| Script | Generated outputs | Output type |
-|---|---|---|
-| `rq3/get_yaml_diff_files.py` | `datasets/processed/rq3/diff_files/`<br>`datasets/processed/rq3/diff_workflow_files.csv` | Dataset |
-| `rq3/syntactic_entities.py` | `datasets/processed/rq3/workflow_syntactic_entities.csv` | Dataset |
+Start with the AIDev tables and archived `datasets/processed/fetched_eligible_pop_commits.csv` and `datasets/processed/rq1/all_eligible_prs.csv`. These intermediate files are required to start the current workflow.
 
-### RQ3 Notebook
+1. Collect AI commit metadata:
 
-| Notebook | Generated outputs | Output type |
-|---|---|---|
-| `rq3/analysis_syntactic_entities.ipynb` | `datasets/processed/rq3/rq3_entity_change_table.csv` | Dataset |
+   ```bash
+   python data_collection_scripts/fetch-ai-workflow-commits-meta.py
+   ```
 
-### RQ4 Script
+2. Run RQ1 notebook 2, then notebook 3 through its CSV-export cells. Stop before **Eligible builds**, which reads check-run data collected in step 5.
+3. Collect human PR metadata:
 
-| Script | Generated outputs | Output type |
-|---|---|---|
-| `rq4/calculate_agreement.py` | `rq4/low_level_label_disagreements.csv` | Dataset |
+   ```bash
+   cd data_collection_scripts
+   python fetch-eligible-human-prs.py
+   cd ..
+   ```
 
-### RQ4 Notebook
+4. Run RQ1 notebook 4 through its CSV-export cells, stopping before **Eligible builds**.
+5. Collect check runs using the AI commit list and newly exported human commits:
 
-| Notebook | Generated outputs | Output type |
-|---|---|---|
-| `rq4/thematic_analysis_results_statistics.ipynb` | `figures/rq4/plot_10_high_level_labels_by_pr_type_counts_with_values.png` | Figure |
+   ```bash
+   python data_collection_scripts/fetch-eligible-commits-check-runs.py
+   ```
 
-## Data Note
+6. Continue with Section 4.2. The human collector resumes existing output; use a separate copy without its old JSONL file for a fully fresh collection. GitHub data can change between collections.
 
-Use the included processed datasets to reproduce the reported analyses. The historical data-collection scripts are only needed to collect fresh GitHub data; they require a GitHub token, and results may change as GitHub repositories evolve.
+To refresh the RQ3 workflow manifest, run `python rq3/get_yaml_diff_files.py` after RQ1 notebook 6 and before RQ3 entity extraction. This downloader reads `GITHUB_TOKEN` from the process environment, not `.env`.
+
+### 4.2 Using existing raw data
+
+Requires the seven AIDev files, three raw JSONL files, and archived `datasets/processed/rq1/all_eligible_prs.csv`. Notebook 5 reads this PR list before notebook 6 regenerates it.
+
+1. Run all cells in RQ1 notebooks **2 → 3 → 4 → 5 → 6 → 7**. Notebook 1 is optional inspection.
+2. Run `rq2/rq2_statistics.ipynb` using the generated `combined_metrics.csv`.
+3. With `datasets/processed/rq3/diff_workflow_files.csv` and its archived YAML files present, extract RQ3 entities:
+
+   ```bash
+   python rq3/syntactic_entities.py
+   ```
+
+   Then run `rq3/analysis_syntactic_entities.ipynb`.
+4. Run `rq4/thematic_analysis_results_statistics.ipynb` using the included agreed-label dataset.
+
+This flow uses local inputs and needs no GitHub token. Generated tables are saved under `datasets/processed/`; figures are saved under `figures/`.
