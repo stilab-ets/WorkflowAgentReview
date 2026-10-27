@@ -1,0 +1,34 @@
+name: Deploy to Trigger.dev (prod)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/src/jobs/tasks/**"
+      - "**/src/trigger/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: 🚀 Deploy Trigger.dev
+        working-directory: ./apps/app
+        env:
+          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        run: bunx trigger.dev@latest deploy

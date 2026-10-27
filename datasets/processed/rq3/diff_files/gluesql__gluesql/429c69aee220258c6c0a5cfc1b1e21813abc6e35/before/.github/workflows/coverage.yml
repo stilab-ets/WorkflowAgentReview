@@ -1,0 +1,58 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main, release-*]
+    paths-ignore:
+      - "docs/**"
+  pull_request:
+    branches: [main, release-*]
+    paths-ignore:
+      - "docs/**"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  coverage:
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup component add llvm-tools-preview
+      - run: cargo install grcov
+      - name: clean
+        run: |
+          cargo clean
+          rm -rf ./target/debug/deps/gluesql*
+          rm *.profraw && rm **/*.profraw
+          cd storages/csv-storage && rm -rf ./tmp && cd ../..
+          cd storages/json-storage && rm -rf ./tmp && cd ../..
+          redis-cli flushall
+      - name: build
+        env:
+          RUSTFLAGS: -Cinstrument-coverage
+        run: cargo build --verbose
+      - name: test
+        env:
+          RUSTFLAGS: -Cinstrument-coverage
+          LLVM_PROFILE_FILE: gluesql-%p-%m.profraw
+          GIT_REMOTE: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+        run: GIT_REMOTE=$GIT_REMOTE cargo test --all-features --verbose
+      - name: Run grcov
+        run: |
+          mkdir coverage
+          grcov . \
+            --binary-path ./target/debug/ \
+            -s . \
+            -t lcov \
+            --branch \
+            --ignore-not-existing \
+            --ignore "/*" \
+            --ignore "pkg/rust/examples/*.rs" \
+            --ignore "cli/src/{cli,helper,lib,main}.rs" \
+            --excl-line "(#\\[derive\\()|(^\s*.await[;,]?$)|(^test_case\!\([\d\w]+,)" \
+            -o ./coverage/lcov.info
+      - name: Coveralls
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

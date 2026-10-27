@@ -1,0 +1,36 @@
+name: Check Remote Executor
+
+on:
+  pull_request:
+    paths:
+      - governance/remote_executor/**
+  push:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.73.0
+          components: rustfmt, clippy
+          override: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "governance/remote_executor -> target"
+      - name: Install Solana
+        run: |
+          sh -c "$(curl -sSfL https://release.solana.com/v1.18.23/install)"
+          echo "/home/runner/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+      - name: Format check
+        run: cargo +1.73.0 fmt --manifest-path ./governance/remote_executor/Cargo.toml --all -- --check
+        if: success() || failure()
+      - name: Clippy check
+        run: cargo +1.73.0 clippy --manifest-path ./governance/remote_executor/Cargo.toml --tests -- --deny warnings
+        if: success() || failure()
+      - name: Run executor tests
+        run: cargo test-sbf --manifest-path ./governance/remote_executor/Cargo.toml
+        if: success() || failure()

@@ -1,0 +1,3554 @@
+pr_url,pr_title,pr_description,author_1_low_level_label,author_2_low_level_label,final_decision,,
+https://github.com/3rdIteration/btcrecover/pull/616,Switch scrypt to wallycore,"## Summary
+- prefer `wallycore.scrypt` in `lib.pylibscrypt` when available and document fallback cost
+- keep `wallycore` only in `requirements-full.txt`
+- document the ~20% slowdown when falling back to `pylibscrypt`
+- add missing source hash for wallycore
+- install `gnu-sed` on macOS CI and `swig` on Termux CI
+
+## Testing
+- `python -m unittest btcrecover.test.test_passwords.Test01Basics`
+
+------
+https://chatgpt.com/codex/tasks/task_e_68893efb15c0832290ad8de32236e54c",Environment tooling update,dependency config fix,Dependencies expansion,,
+https://github.com/AMICI-dev/AMICI/pull/2818,GHA: build docs on ubuntu 24.04,"* Use Ubuntu 24.04 for documentation tests
+* Don't build the pdf documentation that fails for unclear reasons and that nobody is using anyways",runner configuration,Build environment configuration,runner configuration,,
+https://github.com/AgentOps-AI/agentops/pull/1059,fix: Productionize github action to add notebooks,Same as title,Pull request governance,resources access restriction,Pull request governance,,
+https://github.com/AgentOps-AI/agentops/pull/1179,Add llms.txt compilation system for AI model documentation,"# Add llms.txt compilation system for AI model documentation
+
+## Summary
+
+This PR implements an automated system to generate an `llms.txt` file that compiles all relevant AgentOps documentation into a single file for AI models to consume. The implementation follows the pattern established in the AgentStack repository.
+
+**Key changes:**
+- **New compilation script**: `docs/compile_llms_txt.py` that walks the repository and collects all `.md` and `.mdx` files
+- **GitHub Actions automation**: `.github/workflows/compile-llms-txt.yml` that auto-updates `llms.txt` when documentation changes
+- **Generated llms.txt file**: Initial compilation containing 914,749 characters of documentation from all versions (v0, v1, v2)
+
+The system automatically includes:
+- All documentation from `docs/v0/`, `docs/v1/`, `docs/v2/` directories
+- Repository root files (README.md, CONTRIBUTING.md, TOS.md)
+- Example documentation and SDK/integration README files
+
+## Review & Testing Checklist for Human
+
+- [ ] **🔒 Security Review**: Manually review the generated `llms.txt` file to ensure no sensitive information (API keys, secrets, internal URLs) was included
+- [ ] **📝 Content Quality**: Spot-check the `llms.txt` content to verify it's well-formatted and contains appropriate documentation for AI model consumption  
+- [ ] **⚙️ GitHub Actions Testing**: Test the workflow by making a small documentation change and verifying it auto-updates the `llms.txt` file
+- [ ] **📊 File Size Impact**: Verify the 915KB file size is acceptable for the repository and doesn't cause performance issues
+- [ ] **🛡️ Script Logic Review**: Check the file inclusion/exclusion logic in `compile_llms_txt.py` to ensure it's not too broad or missing important exclusions
+
+**Recommended test plan:**
+1. Make a small change to any `.mdx` file in the docs directory
+2. Push to main branch and verify the GitHub Actions workflow runs successfully
+3. Check that `llms.txt` gets automatically updated with the change
+4. Verify the workflow commits back to the repository properly
+
+---
+
+### Diagram
+
+```mermaid
+%%{ init : { ""theme"" : ""default"" }}%%
+graph TD
+    subgraph ""Documentation Sources""
+        DocsV0[""docs/v0/**/*.mdx""]:::context
+        DocsV1[""docs/v1/**/*.mdx""]:::context  
+        DocsV2[""docs/v2/**/*.mdx""]:::context
+        README[""README.md""]:::context
+        CONTRIB[""CONTRIBUTING.md""]:::context
+        Examples[""examples/*/README.md""]:::context
+    end
+    
+    subgraph ""New Implementation""
+        CompileScript[""docs/compile_llms_txt.py""]:::major-edit
+        Workflow["".github/workflows/<br/>compile-llms-txt.yml""]:::major-edit
+        LLMsTxt[""llms.txt<br/>(915KB generated file)""]:::major-edit
+    end
+    
+    DocsV0 --> CompileScript
+    DocsV1 --> CompileScript  
+    DocsV2 --> CompileScript
+    README --> CompileScript
+    CONTRIB --> CompileScript
+    Examples --> CompileScript
+    
+    CompileScript --> LLMsTxt
+    Workflow --> CompileScript
+    
+    subgraph Legend
+        L1[Major Edit]:::major-edit
+        L2[Minor Edit]:::minor-edit  
+        L3[Context/No Edit]:::context
+    end
+    
+    classDef major-edit fill:#90EE90
+    classDef minor-edit fill:#87CEEB
+    classDef context fill:#FFFFFF
+```
+
+### Notes
+
+- The compilation script excludes common directories like `node_modules`, `.git`, `__pycache__`, `.venv`, and `images` to avoid including irrelevant files
+- The GitHub Actions workflow only triggers on changes to documentation files to avoid unnecessary runs
+- This follows the same pattern as AgentStack's llms.txt system, adapted for AgentOps' repository structure
+- The generated file size (915KB) is substantial but reasonable for comprehensive documentation compilation
+
+**Session Info**: Requested by Pratyush Shukla (pratyush@agentops.ai)  
+**Devin Session**: https://app.devin.ai/sessions/ba7f9e47e7f74e399bcc32e6c14b8a00",documentation addition,build task addition,documentation addition,,
+https://github.com/AgentOps-AI/agentops/pull/603,Add LLM Integration Tests,"# 🔍 Review Summary 
+ **Purpose**:
+- Enhance the testing framework by integrating tests for multiple LLM providers.
+
+**Changes**:
+- **Configuration**: Introduced environment variables for API keys in GitHub workflow and initialized various LLM providers.
+- **Enhancement**: Improved async handling and error management for AI21, Groq, Litellm, and Mistral providers.
+- **Test**: Expanded testing to include comprehensive integration tests for all LLM providers, covering both synchronous and asynchronous call patterns.
+- **Dependencies**: Updated `tox.ini` to include necessary test dependencies for new providers.
+
+**Impact**:
+- Significantly enhances the reliability and coverage of our testing infrastructure, improving code quality and system integrity. 
+
+
+
+<details><summary>Original Description</summary>
+
+Adds integration tests for Anthropic, Cohere, Groq, Litellm, Mistral, AI21
+
+This PR adds comprehensive integration tests for multiple LLM providers:
+- Anthropic (Claude)
+- Cohere
+- Groq
+- Litellm
+- Mistral
+- AI21
+
+Each test verifies four types of calls:
+1. Synchronous (non-streaming)
+2. Synchronous (streaming)
+3. Asynchronous (non-streaming)
+4. Asynchronous (streaming)
+
+The PR also:
+- Adds necessary test dependencies to tox.ini
+- Updates GitHub workflow with required environment variables
+- Adds debug prints for API key and session verification
+- Enables LLM call instrumentation in tests
+
+Link to Devin run: https://app.devin.ai/sessions/e034afaf9cfb45529f3b652de116cf0e
+
+</details>",test configuration,Build environment configuration,test configuration,,
+https://github.com/AgentOps-AI/agentops/pull/605,Add integration tests for Anthropic/Cohere/Groq/Litellm/Mistral/AI21,"## Changes
+- Added pytest.skip() for missing API keys in test files
+- Standardized API key handling across all provider tests
+- Fixed docstring formatting in test files
+- Improved test pattern descriptions
+
+## Known Issues (Need Resolution)
+1. Package Version/Compatibility Issues:
+   - Mistral: Missing 'Chat' class in mistralai package
+   - AI21: Missing module 'ai21.clients.studio.resources.studio_answer'
+   - These suggest incompatible or outdated package versions
+
+2. Environment Configuration Issues:
+   - Python 3.7, 3.8, and 3.9 interpreters missing in CI environment
+   - Preventing tests from running on these Python versions
+
+3. Test Implementation Issues:
+   - LiteLLM: Maximum recursion depth exceeded in time travel cache
+   - This needs investigation in the test implementation
+
+Link to Devin run: https://app.devin.ai/sessions/9301617f90e843e0aa0e665551a08ab4",test configuration,Build environment configuration,test configuration,,
+https://github.com/ComposioHQ/composio/pull/1376,fix: pin autogen and langgraph-prebuilt,"<!-- ELLIPSIS_HIDDEN -->
+
+
+
+> [!IMPORTANT]
+> Pin `langgraph-prebuilt` to `>=0.1.0` and add `ag2[openai]` in `examples.yml`.
+> 
+>   - **Dependencies**:
+>     - Pin `langgraph-prebuilt` to version `>=0.1.0` in `examples.yml`.
+>     - Add `ag2[openai]` to the list of installed packages in `examples.yml`.
+> 
+> <sup>This description was created by </sup>[<img alt=""Ellipsis"" src=""https://img.shields.io/badge/Ellipsis-blue?color=175173"">](https://www.ellipsis.dev?ref=ComposioHQ%2Fcomposio&utm_source=github&utm_medium=referral)<sup> for 000e2b2a27709ae85cdbdf6a96abe72a17f9315f. It will automatically update as commits are pushed.</sup>
+
+<!-- ELLIPSIS_HIDDEN -->",Dependencies expansion,Build environment configuration,Dependencies expansion,,
+https://github.com/DannyMac180/meta-agent/pull/187,ci: force pydantic version,"## Summary
+- enforce a minimum pydantic version when installing dependencies in CI
+
+## Testing
+- `ruff check .`
+- `black --check .` *(fails: would reformat many files)*
+- `mypy .` *(fails: duplicate module named ""meta_agent"")*
+- `pyright`
+- `pytest -q` *(fails: TypeError in openai during import)*
+
+------
+https://chatgpt.com/codex/tasks/task_e_684f1bf70028832f98a8f30830798178",dependency configuration,Version consistency,Version consistency,,
+https://github.com/DaveSkender/Stock.Indicators/pull/1372,fix: Copilot setup continue on error,"This pull request updates the `.github/workflows/copilot-setup-steps.yml` file to improve the Copilot environment setup workflow by adding permissions and making specific steps more resilient to errors. Below are the most important changes:
+
+### Workflow Permissions:
+
+* Added `permissions` block with `contents: read` to explicitly define the required permissions for the workflow.
+
+### Error Handling Enhancements:
+
+* Added `continue-on-error: true` to the following steps to allow the workflow to proceed even if these steps encounter errors:
+  - Installing .NET tools (`dotnet-format` and `dotnet-outdated-tool`).
+  - Building the .NET solution.
+  - Generating the environment summary.
+
+### Build Command Simplification:
+
+* Removed the `--no-incremental` flag from the `dotnet build` command to simplify the build process.",Conditional execution configuration,resources access restriction,Conditional execution configuration,,
+https://github.com/Kiln-AI/Kiln/pull/371,Add KILN_CONFIG_REPO gating,"## Summary
+- gate docs deploy when repo isn't a config repo
+- introduce workflow to publish config when `KILN_CONFIG_REPO` is `true`
+- document how to enable config publishing via repo environment variables
+
+## Testing
+- `git status --short`
+
+------
+https://chatgpt.com/codex/tasks/task_e_6852ccab00dc83329c2ca448f5b1f1a9
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+  - Introduced a new workflow to automate publishing of remote configuration when the appropriate environment variable is set.
+
+- **Documentation**
+  - Added instructions on enabling the remote configuration publishing workflow to the README.
+
+- **Chores**
+  - Updated deployment conditions in the documentation build workflow to respect repository environment variables.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",publish & release task addition,Conditional execution configuration,publish & release task addition,,
+https://github.com/Kiln-AI/Kiln/pull/461,Add developer content check workflow,"## Summary
+- add workflow that searches for leftover developer code like `console.log`, Python `print(`, and TODO/FIXME comments
+- reword TODO comments to keep intent while avoiding the keyword
+
+## Testing
+- `uvx ruff check --select I`
+- `uvx ruff format --check .`
+- `uv run pyright .`
+- `uv run python3 -m pytest --benchmark-quiet -q .`
+- `npm run format_check` in `app/web_ui`
+- `npm run lint` in `app/web_ui`
+- `npm run check` in `app/web_ui`
+- `npm run test_run` in `app/web_ui`
+- `npm run build` in `app/web_ui`
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_6888e8b79d5883328a34ac7cf92cea71
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+* **Chores**
+  * Updated comments throughout the codebase to rephrase or clarify existing notes, removing or rewording TODOs and related statements.
+  * Minor adjustments to provider model IDs and comments in model configuration.
+  * Added a new GitHub Actions workflow to automatically detect and flag leftover debug content (such as console.log, print statements, TODOs, and FIXMEs) in pull requests and pushes to the main branch.
+  * Enforced stricter linting rules to disallow console.log usage while permitting other console methods.
+
+* **Style**
+  * Replaced print statements with sys.stdout.write in some test scripts for output consistency.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",Pull request governance,lint task addition,lint task addition,,
+https://github.com/OpenSprinkler/OpenSprinkler-App/pull/252,Append GitVersion to workflow run name,"## Summary
+- update GitHub Actions workflows to append the GitVersion `semVer` to each run name
+- ensure Unit Tests workflow also runs GitVersion before tests
+
+## Testing
+- `npm test` *(fails: No binary for ChromeHeadless)*
+
+------
+https://chatgpt.com/codex/tasks/task_e_683ae8d8de30832c9a93d5afdf935224",Workflow reporting,Version consistency,Workflow reporting,,
+https://github.com/OpenSprinkler/OpenSprinkler-App/pull/254,Append GitVersion to workflow run name,"## Summary
+- add a reusable composite action to append GitVersion output to run name
+- update all workflows to call the composite action
+
+## Testing
+- `npm test` *(fails: No binary for ChromeHeadless)*
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_683ae8d8de30832c9a93d5afdf935224",Workflow reporting,Version consistency,Workflow reporting,,
+https://github.com/OpenSprinkler/OpenSprinkler-App/pull/258,Add Cloudflare cache purge after Firebase deploy,"## Summary
+- purge Cloudflare cache using Cloudflare email and API key after Firebase Hosting deploy
+- purge target host derived from workflow environment
+
+## Testing
+- `npx grunt`
+- `npm test` *(fails: No binary for ChromeHeadless browser on your platform)*
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_683c56665a34832cbf17e5fb6fffabbf",publish & release task addition,Build environment configuration,Build environment configuration,,
+https://github.com/PaloAltoNetworks/docusaurus-openapi-docs/pull/1185,Perform visual diff following deploy preview,"## Summary
+- port screenshot diff script to TypeScript
+- run the script automatically after deploy-preview
+- save diff artifacts
+- add PR summary comment for diff results
+
+## Testing
+- `yarn lint`
+- `yarn test`
+
+## Expected behavior
+
+Visual diff to be performed against current sitemap.xml published on live site. The intended goal is to detect possible regression bugs, specifically those impacting how OpenAPI schemas are evaluated and rendered.
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_6862fbb8627c832397ef77fc31806ebf",test task addition,Workflow reporting,Workflow reporting,,
+https://github.com/Stirling-Tools/Stirling-PDF/pull/3757,Update PR-Demo-Comment-with-react.yml for security flags,"# Description of Changes
+
+Please provide a summary of the changes, including:
+
+- What was changed
+- Why the change was made
+- Any challenges encountered
+
+Closes #(issue_number)
+
+---
+
+## Checklist
+
+### General
+
+- [ ] I have read the [Contribution Guidelines](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/CONTRIBUTING.md)
+- [ ] I have read the [Stirling-PDF Developer Guide](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/DeveloperGuide.md) (if applicable)
+- [ ] I have read the [How to add new languages to Stirling-PDF](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/HowToAddNewLanguage.md) (if applicable)
+- [ ] I have performed a self-review of my own code
+- [ ] My changes generate no new warnings
+
+### Documentation
+
+- [ ] I have updated relevant docs on [Stirling-PDF's doc repo](https://github.com/Stirling-Tools/Stirling-Tools.github.io/blob/main/docs/) (if functionality has heavily changed)
+- [ ] I have read the section [Add New Translation Tags](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/HowToAddNewLanguage.md#add-new-translation-tags) (for new translation tags only)
+
+### UI Changes (if applicable)
+
+- [ ] Screenshots or videos demonstrating the UI changes are attached (e.g., as comments or direct attachments in the PR)
+
+### Testing (if applicable)
+
+- [ ] I have tested my changes locally. Refer to the [Testing Guide](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/DeveloperGuide.md#6-testing) for more details.",fix step input,test code fix,Build environment configuration,,
+https://github.com/Stirling-Tools/Stirling-PDF/pull/3768,ci: add matrix strategy for spring-security and improve test report check logic,"# Description of Changes
+
+- Introduced a new matrix axis `spring-security` in the GitHub Actions workflow to run tests with and without Spring Security features enabled.
+- Removed duplicated build steps and unified them into a single Gradle task using the matrix value.
+- Refactored the test report check step to dynamically iterate over expected directories using a Bash array, improving maintainability and readability.
+- Ensured test report artifacts are uploaded regardless of test success, with clearer naming and a fallback if files are missing.
+
+
+---
+
+## Checklist
+
+### General
+
+- [x] I have read the [Contribution Guidelines](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/CONTRIBUTING.md)
+- [x] I have read the [Stirling-PDF Developer Guide](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/DeveloperGuide.md) (if applicable)
+- [ ] I have read the [How to add new languages to Stirling-PDF](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/HowToAddNewLanguage.md) (if applicable)
+- [x] I have performed a self-review of my own code
+- [x] My changes generate no new warnings
+
+### Documentation
+
+- [ ] I have updated relevant docs on [Stirling-PDF's doc repo](https://github.com/Stirling-Tools/Stirling-Tools.github.io/blob/main/docs/) (if functionality has heavily changed)
+- [ ] I have read the section [Add New Translation Tags](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/HowToAddNewLanguage.md#add-new-translation-tags) (for new translation tags only)
+
+### UI Changes (if applicable)
+
+- [ ] Screenshots or videos demonstrating the UI changes are attached (e.g., as comments or direct attachments in the PR)
+
+### Testing (if applicable)
+
+- [ ] I have tested my changes locally. Refer to the [Testing Guide](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/DeveloperGuide.md#6-testing) for more details.",Matrix Coverage Expansion,Workflow reporting,Workflow reporting,,
+https://github.com/Stirling-Tools/Stirling-PDF/pull/3803,chore: update Docker Compose to v2.37.2 in GitHub Actions workflow,"# Description of Changes
+
+- **What was changed**: Updated the Docker Compose version in the GitHub Actions `build.yml` from `v2.32.4` to `v2.37.2`.
+- **Why the change was made**: To benefit from the latest fixes and internal improvements introduced in `v2.37.2`, including:
+  - Added support for `use_api_socket`
+  - Fixed container name output in `images --json`
+  - Prevented panic on `w` shortcut usage without watch support
+  - Internal restructuring of `run` logic
+  - Dependency updates (`compose-go v2.6.5`, `containerd v2.1.2`)
+
+See: https://github.com/docker/compose/releases
+
+---
+
+## Checklist
+
+### General
+
+- [x] I have read the [Contribution Guidelines](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/CONTRIBUTING.md)
+- [x] I have read the [Stirling-PDF Developer Guide](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/DeveloperGuide.md) (if applicable)
+- [ ] I have read the [How to add new languages to Stirling-PDF](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/HowToAddNewLanguage.md) (if applicable)
+- [ ] I have performed a self-review of my own code
+- [ ] My changes generate no new warnings
+
+### Documentation
+
+- [ ] I have updated relevant docs on [Stirling-PDF's doc repo](https://github.com/Stirling-Tools/Stirling-Tools.github.io/blob/main/docs/) (if functionality has heavily changed)
+- [ ] I have read the section [Add New Translation Tags](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/HowToAddNewLanguage.md#add-new-translation-tags) (for new translation tags only)
+
+### UI Changes (if applicable)
+
+- [ ] Screenshots or videos demonstrating the UI changes are attached (e.g., as comments or direct attachments in the PR)
+
+### Testing (if applicable)
+
+- [ ] I have tested my changes locally. Refer to the [Testing Guide](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/DeveloperGuide.md#6-testing) for more details.",Environment tooling update,Version consistency,Environment tooling update,,
+https://github.com/Stirling-Tools/Stirling-PDF/pull/3894,Update PR-Demo-Comment-with-react.yml,"# Description of Changes
+
+<!--
+Please provide a summary of the changes, including:
+
+- What was changed
+- Why the change was made
+- Any challenges encountered
+
+Closes #(issue_number)
+-->
+
+---
+
+## Checklist
+
+### General
+
+- [ ] I have read the [Contribution Guidelines](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/CONTRIBUTING.md)
+- [ ] I have read the [Stirling-PDF Developer Guide](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/devGuide/DeveloperGuide.md) (if applicable)
+- [ ] I have read the [How to add new languages to Stirling-PDF](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/devGuide/HowToAddNewLanguage.md) (if applicable)
+- [ ] I have performed a self-review of my own code
+- [ ] My changes generate no new warnings
+
+### Documentation
+
+- [ ] I have updated relevant docs on [Stirling-PDF's doc repo](https://github.com/Stirling-Tools/Stirling-Tools.github.io/blob/main/docs/) (if functionality has heavily changed)
+- [ ] I have read the section [Add New Translation Tags](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/devGuide/HowToAddNewLanguage.md#add-new-translation-tags) (for new translation tags only)
+
+### UI Changes (if applicable)
+
+- [ ] Screenshots or videos demonstrating the UI changes are attached (e.g., as comments or direct attachments in the PR)
+
+### Testing (if applicable)
+
+- [ ] I have tested my changes locally. Refer to the [Testing Guide](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/devGuide/DeveloperGuide.md#6-testing) for more details.",resources access restriction,Pull request governance,Pull request governance,,
+https://github.com/Stirling-Tools/Stirling-PDF/pull/3993,Add auto deploy for trusted PRs,"## Summary
+- add workflow to auto-deploy PRs opened by trusted users
+- close deployments when the PR is closed
+
+## Testing
+- `./gradlew build`
+
+
+------
+https://chatgpt.com/codex/tasks/task_b_687c9a33e7a48328ab5f274c1af7b8ab",publish & release task addition,Pull request governance,Pull request governance,,
+https://github.com/airbytehq/PyAirbyte/pull/589,fix: ensure database context is set before schema creation in Snowflake,"Fixes Snowflake schema creation by ensuring database context is properly set.
+
+This PR:
+1. Overrides _ensure_schema_exists in SnowflakeSqlProcessor to properly set database context
+2. Uses fully qualified schema names in CREATE SCHEMA statements
+3. Maintains existing error handling for schema existence
+
+Link to Devin run: https://app.devin.ai/sessions/be3168a4b7974151b7cf9f082e47e893",test configuration,Workflow reporting,test configuration,,
+https://github.com/airbytehq/PyAirbyte/pull/593,ci: fix poetry lock workflow for missing/blank file,"Copy poetry lock workflow fix from airbyte-python-cdk to check for missing/blank lock file.
+
+This PR copies the changes from airbyte-python-cdk#284 to ensure that when we run the `/poetry-lock` slash command, the job first checks for a blank or missing lock file. If blank or missing, it gets the lock file from the main branch before running `poetry lock`.
+
+Link to Devin run: https://app.devin.ai/sessions/f2f03d0c39cb4355924e0243ddbae7e2",package manager fix,lint task addition,package manager fix,,
+https://github.com/antiwork/gumroad/pull/484,Create docker-image.yml,"<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **Chores**
+  * Added a new workflow to automatically build Docker images for each push or pull request to the main branch.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",build task addition,publish & release task addition,build task addition,,
+https://github.com/antiwork/gumroad/pull/637,Remove pull_request trigger from tests workflow,"# Remove pull_request trigger from tests workflow
+
+## Summary
+Removes the `pull_request` trigger from `.github/workflows/tests.yml` to eliminate duplicate CI runs. The workflow was previously triggering on both `push` and `pull_request` events, causing tests to run twice for each PR (once on push to branch, once on PR synchronize). Now the workflow only triggers on `push` events.
+
+**Changed:**
+- Removed `pull_request:` and `types: [opened, synchronize, reopened]` lines from the workflow trigger configuration
+- Kept only `push:` trigger
+
+## Review & Testing Checklist for Human
+- [ ] Verify that CI still runs when pushing commits to this PR branch
+- [ ] Confirm that no duplicate CI runs occur (should only see one test run per commit)
+- [ ] Check that all existing test jobs (build_base, test_fast, test_slow, etc.) continue to function properly
+- [ ] Validate YAML syntax is correct and workflow file parses without errors
+
+**Recommended test plan:**
+1. Push a commit to this PR branch and verify only one CI run appears
+2. Create a test PR from another branch and confirm no duplicate runs occur
+3. Check that CI still runs on pushes to main branch
+
+---
+
+### Diagram
+```mermaid
+%%{ init : { ""theme"" : ""default"" }}%%
+graph TD
+    A["".github/workflows/tests.yml""]:::major-edit
+    B["".github/workflows/autofix.yml""]:::context
+    C[""Push Events""]:::context
+    D[""Pull Request Events""]:::context
+    E[""GitHub Actions CI""]:::context
+    
+    A -->|""triggers on""| C
+    A -.->|""no longer triggers on""| D
+    B -->|""still triggers on""| D
+    C --> E
+    D --> E
+    
+    subgraph Legend
+        L1[Major Edit]:::major-edit
+        L2[Minor Edit]:::minor-edit  
+        L3[Context/No Edit]:::context
+    end
+
+    classDef major-edit fill:#90EE90
+    classDef minor-edit fill:#87CEEB
+    classDef context fill:#FFFFFF
+```
+
+### Notes
+- The `autofix.yml` workflow was intentionally left unchanged as it serves a different purpose (code formatting) and should only run on pull requests
+- This addresses the specific issue reported by Daniel Lockyer about 2x CI execution on PRs
+- All existing test functionality remains intact, just triggered only by push events
+
+**Link to Devin run:** https://app.devin.ai/sessions/08c296478d774f579f6f455bc6cab469  
+**Requested by:** Ershad Kunnakkadan (hello@ershadk.com)",build waste optimization,resources access restriction,build waste optimization,,
+https://github.com/beowolx/rensa/pull/23,feat: implement cminhash algorithm,,test configuration,action refactoring,test configuration,,
+https://github.com/browser-use/browser-use/pull/2221,eval-runner-name,"Auto-generated PR for branch: eval-runner-name
+    
+<!-- This is an auto-generated description by cubic. -->
+---
+
+## Summary by cubic
+Fixed a typo in the evaluation workflow to use the correct runner name 'ubuntu-latest-16-core'.
+
+<!-- End of auto-generated description by cubic. -->",runner configuration,syntax error,syntax error,,
+https://github.com/browser-use/browser-use/pull/2270,Update eval.yaml,"<!-- This is an auto-generated description by cubic. -->
+
+## Summary by cubic
+Added support for passing a Gmail 2FA token to the eval workflow and improved command construction and debugging for this parameter.
+
+- **New Features**
+  - Accepts a Gmail 2FA token from the workflow payload and adds it to the command if present.
+  - Prints debug info for the Gmail 2FA token and command string to help with troubleshooting.
+
+<!-- End of auto-generated description by cubic. -->",Conditional execution configuration,Workflow reporting,Workflow reporting,,
+https://github.com/browser-use/browser-use/pull/2286,Update eval.yaml,"<!-- This is an auto-generated description by cubic. -->
+
+## Summary by cubic
+Improved handling of Gmail 2FA tokens in the eval workflow by adding JSON validation and clearer debug output.
+
+- **Bug Fixes**
+  - Reformatted token input using jq to ensure valid JSON.
+  - Added detailed debug logs for token assignment.
+
+<!-- End of auto-generated description by cubic. -->",fix step input,action refactoring,test code fix,benchmark configration,
+https://github.com/bruin-data/bruin/pull/830,Fix ingestr version update in action,"The `.github/workflows/update-ingestr.yml` workflow was updated to correctly modify the `ingestrVersion` in `pkg/python/uv.go` before creating a pull request.
+
+Key changes include:
+
+*   **Dedicated Update Step**: The version update logic was moved from the `Check ingestr version` step into a new, dedicated `Update ingestr version in code` step.
+*   **Corrected `sed` Regex**: The `sed` command's regex pattern was updated from `s|(ingestrVersion\s*=\s*\"")[^\""]+(\"" )|\1$latest\2|` to `s/(ingestrVersion[[:space:]]*=[[:space:]]*)""[^""]+""/\1""${{ steps.check.outputs.version }}""/`. This change correctly handles varying whitespace (tabs/spaces) around the equals sign in the Go constant definition.
+*   **Explicit Staging and Verification**:
+    *   `git add pkg/python/uv.go` was added to explicitly stage the file changes.
+    *   Verification steps, including `grep` to show the updated line and `git diff --cached --quiet` to confirm changes were made, were introduced to ensure the update was successful.
+*   **Conditional Execution**: The new update step and subsequent PR creation logic are now conditionally executed only when a new version is detected.",fix step input,Version consistency,Version consistency,,
+https://github.com/cloudwalk/stratus/pull/2018,feat: add binary checksum generation to build workflow,"### **User description**
+- Add checksum generation step for stratus binary
+- Generate checksums.txt file with SHA256 hash
+- Upload checksums file as a separate artifact with commit SHA
+- Keep checksum file in project root for easy access
+
+
+___
+
+### **PR Type**
+Enhancement
+
+
+___
+
+### **Description**
+- Add checksum generation for stratus binary
+
+- Upload checksums as separate artifact
+
+- Improve build workflow configuration
+
+- Update Rust setup and dependencies
+
+
+___
+
+
+
+### **Changes walkthrough** 📝
+<table><thead><tr><th></th><th align=""left"">Relevant files</th></tr></thead><tbody><tr><td><strong>Enhancement</strong></td><td><table>
+<tr>
+  <td>
+    <details>
+      <summary><strong>build-binary.yml</strong><dd><code>Enhance build workflow with checksum generation and configuration </code><br><code>updates</code></dd></summary>
+<hr>
+
+.github/workflows/build-binary.yml
+
+<li>Added checksum generation for stratus binary<br> <li> Implemented artifact upload for checksums<br> <li> Updated Rust setup and cache configuration<br> <li> Added installation of necessary dependencies
+
+
+</details>
+
+
+  </td>
+  <td><a href=""https://github.com/cloudwalk/stratus/pull/2018/files#diff-056d8a48a1886a7da6ec1139b0a22f18e4d938f4183e7e381a96949206e3efcd"">+69/-0</a>&nbsp; &nbsp; </td>
+
+</tr>
+</table></td></tr></tr></tbody></table>
+
+___
+
+> <details> <summary>  Need help?</summary><li>Type <code>/help how to ...</code> in the comments thread for any questions about PR-Agent usage.</li><li>Check out the <a href=""https://qodo-merge-docs.qodo.ai/usage-guide/"">documentation</a> for more information.</li></details>",artifact integrity validation,build task addition,artifact integrity validation,,
+https://github.com/cloudwalk/stratus/pull/2086,fix: add flag to skip coverage,"### **PR Type**
+Enhancement, Tests
+
+
+___
+
+### **Description**
+- Add SKIP_COVERAGE flag for e2e-interval-stratus workflow
+
+- Implement conditional coverage collection in justfile
+
+- Skip coverage generation when SKIP_COVERAGE is set
+
+- Update e2e-test workflow to use SKIP_COVERAGE
+
+
+___
+
+
+
+### **Changes walkthrough** 📝
+<table><thead><tr><th></th><th align=""left"">Relevant files</th></tr></thead><tbody><tr><td><strong>Configuration changes</strong></td><td><table>
+<tr>
+  <td>
+    <details>
+      <summary><strong>e2e-test.yml</strong><dd><code>Add SKIP_COVERAGE flag to e2e-interval-stratus workflow</code>&nbsp; &nbsp; </dd></summary>
+<hr>
+
+.github/workflows/e2e-test.yml
+
+- Add `justfile_env: ""SKIP_COVERAGE=1""` to e2e-interval-stratus job
+
+
+</details>
+
+
+  </td>
+  <td><a href=""https://github.com/cloudwalk/stratus/pull/2086/files#diff-5cc2c864012004f60ee3f9078fa1c4a8721c6b841e386c57f12bea58b692e6e2"">+1/-0</a>&nbsp; &nbsp; &nbsp; </td>
+
+</tr>
+</table></td></tr><tr><td><strong>Enhancement</strong></td><td><table>
+<tr>
+  <td>
+    <details>
+      <summary><strong>justfile</strong><dd><code>Implement conditional coverage collection and reporting</code>&nbsp; &nbsp; </dd></summary>
+<hr>
+
+justfile
+
+<li>Add conditional logic to skip coverage collection<br> <li> Implement checks for SKIP_COVERAGE environment variable<br> <li> Skip coverage report generation when SKIP_COVERAGE is set<br> <li> Maintain existing functionality when SKIP_COVERAGE is not set
+
+
+</details>
+
+
+  </td>
+  <td><a href=""https://github.com/cloudwalk/stratus/pull/2086/files#diff-deb9bb56fb122db0b605aa5b63f95a4665c905b18dd670e1fa6c877576a94ff1"">+19/-6</a>&nbsp; &nbsp; </td>
+
+</tr>
+</table></td></tr></tr></tbody></table>
+
+___
+
+> <details> <summary>  Need help?</summary><li>Type <code>/help how to ...</code> in the comments thread for any questions about PR-Agent usage.</li><li>Check out the <a href=""https://qodo-merge-docs.qodo.ai/usage-guide/"">documentation</a> for more information.</li></details>",build waste optimization,test configuration,test configuration,,
+https://github.com/commaai/panda/pull/2209,speeeedy ci,,Build speed optimization,redundant task removal,Build speed optimization,,
+https://github.com/commaai/panda/pull/2214,try github arm runners,,Platform migration,Build environment configuration,runner configuration,,
+https://github.com/crewAIInc/crewAI/pull/2710,test: add windows & macos on tests runner,"This will help us ensure the framework works well on Windows, Ubuntu, and macOS",Matrix Coverage Expansion,Build environment configuration,runner configuration,,
+https://github.com/crewAIInc/crewAI/pull/2795,Fix Python 3.13 compatibility (issue #2794),"# Fix Python 3.13 compatibility (issue #2794)
+
+## Issue
+CrewAI version 0.119.0 cannot be installed on Python 3.13 due to a version constraint in the package metadata that explicitly excludes Python 3.13 (`>=3.10,<3.13`).
+
+## Fix
+- Updated Python version constraint from `>=3.10,<3.13` to `>=3.10,<3.14` in all relevant files:
+  - Main pyproject.toml
+  - Template pyproject.toml files for flow, crew, and tool projects
+  - uv.lock file
+  - Test files in the CLI deployment tests
+- Added test file to verify Python version compatibility
+- Updated GitHub Actions workflow to include Python 3.13 testing
+- Added Docker test to verify installation on Python 3.13
+
+## Testing
+- Created a Docker test using Python 3.13 to verify the package can be installed and imported
+- Added a basic test file that verifies the package can be imported with the current Python version
+- Verified the Docker test passes with the updated version constraint
+
+## Link to Devin run
+https://app.devin.ai/sessions/e19a6ea80009478dbdd0f1d5921d5d71
+
+## Requested by
+Joe Moura (joao@crewai.com)",Matrix Coverage Expansion,package manager fix,Version consistency,,
+https://github.com/datahub-project/datahub/pull/14115,fix(ci): use depot runners when possible,"<!--
+
+Thank you for contributing to DataHub!
+
+Before you submit your PR, please go through the checklist below:
+
+- [ ] The PR conforms to DataHub's [Contributing Guideline](https://github.com/datahub-project/datahub/blob/master/docs/CONTRIBUTING.md) (particularly [Commit Message Format](https://github.com/datahub-project/datahub/blob/master/docs/CONTRIBUTING.md#commit-message-format))
+- [ ] Links to related issues (if applicable)
+- [ ] Tests for the changes have been added/updated (if applicable)
+- [ ] Docs related to the changes have been added/updated (if applicable). If a new feature has been added a Usage Guide has been added for the same.
+- [ ] For any breaking change/potential downtime/deprecation/big changes an entry has been made in [Updating DataHub](https://github.com/datahub-project/datahub/blob/master/docs/how/updating-datahub.md)
+
+-->",runner configuration,Build environment configuration,runner configuration,,
+https://github.com/datahub-project/datahub/pull/14239,feat(ingest): improve CI batches,"- Moves us from 3 -> 6 ingestion batches to split our tests across. The goal is ~12-15 minutes per batch.
+- Only runs the expensive integration tests for Python 3.11. Lint + unit tests continue to run for both Python 3.9 and 3.11.
+
+<!--
+
+Thank you for contributing to DataHub!
+
+Before you submit your PR, please go through the checklist below:
+
+- [ ] The PR conforms to DataHub's [Contributing Guideline](https://github.com/datahub-project/datahub/blob/master/docs/CONTRIBUTING.md) (particularly [Commit Message Format](https://github.com/datahub-project/datahub/blob/master/docs/CONTRIBUTING.md#commit-message-format))
+- [ ] Links to related issues (if applicable)
+- [ ] Tests for the changes have been added/updated (if applicable)
+- [ ] Docs related to the changes have been added/updated (if applicable). If a new feature has been added a Usage Guide has been added for the same.
+- [ ] For any breaking change/potential downtime/deprecation/big changes an entry has been made in [Updating DataHub](https://github.com/datahub-project/datahub/blob/master/docs/how/updating-datahub.md)
+
+-->",Matrix Coverage Expansion,Environment tooling update,task decomposition,,
+https://github.com/dcSpark/shinkai-local-ai-agents/pull/1007,bump to 1.1.0,,Version consistency,Environment tooling update,Environment tooling update,,
+https://github.com/dcSpark/shinkai-local-ai-agents/pull/605,chore: added ci,,artifact integrity validation,test task addition,artifact integrity validation,,
+https://github.com/dcSpark/shinkai-local-ai-agents/pull/607,chore: check if can sign txt file,,artifact integrity validation,Environment tooling update,artifact integrity validation,,
+https://github.com/dcSpark/shinkai-local-ai-agents/pull/843,Nico/update recommended,,Version consistency,Environment tooling update,Environment tooling update,,
+https://github.com/digitaldemocracy2030/kouchou-ai/pull/512,[GITHUB_ACTIONS] アサイン状況に合わせてステータスを更新する,"# 変更の概要
+GitHub IssuesとGitHub Projectsのステータスフィールドを以下の条件とイベントに基づいて自動的に更新します。
+| **条件**  | **トリガー** | **変更後のstatus** |
+| ------------- | ------------- | ------------- |
+| Status in [`No Status`, `Cold List`, `Need Refinement`, `Ready`]  | Assign | `In Progress` |
+| Status = `In Progress` | Unassign | `Ready` |
+
+# 変更の背景
+kouchou-ai のIssue数が多く、statusの管理コストが高いため、一部の変更を自動化したい。
+
+# 関連Issue
+#425
+(後続Issue: #454 , #459 )
+
+# 実装詳細
+- 既存の処理への追加
+    - `.github/workflows/assign_bot.yml`：スラッシュコマンドでassign/unassignされたときに`status_update.yml`を呼び出す設定
+- GitHub Actionsワークフローを作成：
+    - `.github/workflows/assign_manually.yml`：GitHubのUI上でassign/unassignされたときに`status_update.yml`を呼び出す設定
+    - `.github/workflows/status_update.yml`：ステータス更新処理を蹴る設定。他のymlから呼び出される（Issues 454, 459で再利用予定）
+    - `.github/scripts/status_update.py` : 冒頭の条件通りにステータスを更新する処理（Issues 454, 459で再利用予定）
+    - `.github/scripts/status_update_common.py` : ステータス更新の共通処理（Issues 454, 459で再利用予定）
+- GraphQL API でProjectsやIssueの情報を取得　※ REST API はProjectV2に未対応のため
+- Tokenは手動発行ではなく GitHub Apps 経由で発行　※ ProjectV2 x GitHub Actions では手動設定で権限付与できないため
+
+# 必要な設定
+
+### OrganizationのGitHub Apps を作成する
+- 手順：https://docs.github.com/ja/apps/creating-github-apps/registering-a-github-app/registering-a-github-app
+- WebhookはOFF
+- Permissions > Organization permissions > Projects > Read and write を指定
+- Permissions > Repository permissions > Metadata > Read only を指定
+- Permissions > Repository permissions > Actions > Read only を指定
+    - 確認メールが届いたら、リンク先でリポジトリを指定して許可
+- Install only on this account
+
+### Private Key の発行
+- 作成完了画面の指示に従い、続けてGitHub Apps のインストール準備としてprivate keyを発行する
+- 手順：https://docs.github.com/ja/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps
+- 発行すると、ローカルに秘密鍵（pemファイル）がダウンロードされる
+
+### OrganizationのGitHub Apps をインストールする
+- 手順：https://docs.github.com/ja/apps/using-github-apps/installing-your-own-github-app
+- General > Generate a new client secret
+- Install App > Install (to organization)
+
+### Organization secrets の設定
+- Organization の設定ページを開く
+- Repository > Settings > General > Security > Secrets and variables > Actions > Organization secrets
+- PJ_APP_ID : AppのGeneralタブのApp ID
+- PJ_APP_PEM : private key を発行した際にローカルにダウンロードされたpemファイルの内容（テキスト全体）
+    - Repository を指定する
+
+# 補足：
+
+- `.github/scripts/repo_config.py` について
+    - `digitaldemocracy2030/kouchou-ai` に特化したID等になっている
+    - 機密情報ではない
+    - 本来は環境設定に持たせる方が綺麗だが、どうせ後続処理もこのリポジトリ独自のルールに則った処理なので、このままにしている
+        - もし将来的に他のリポジトリで使い回すようであれば環境変数へ移植するのが望ましい
+- **PROJECT_ID** (PVT_xxxx) と **STATUS_FIELD** (PVTSSF_xxxx) の取得方法：
+    - https://docs.github.com/ja/graphql/overview/explorer にアクセス
+    - Githubアカウントでログイン ※ `digitaldemocracy2030` のメンバである必要がある
+    - 以下のクエリを実行:
+```
+{
+  organization(login: ""digitaldemocracy2030"") {
+    projectV2(number: 3) {
+      id
+      fields(first: 20) {
+        nodes {
+          ... on ProjectV2SingleSelectField {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+# スクリーンショット
+
+No Status + assigned -> In Progress
+<img width=""579"" alt=""image"" src=""https://github.com/user-attachments/assets/276cb071-900b-4a42-89c8-b514b2c944ae"" />
+
+Cold List + assigned -> In Progress
+<img width=""598"" alt=""image"" src=""https://github.com/user-attachments/assets/3fc89e15-5ff1-425c-be73-13ed789ed318"" />
+
+In Progress + unassigned -> Ready
+<img width=""533"" alt=""image"" src=""https://github.com/user-attachments/assets/b294c6c9-6a78-4a0b-90f6-4cb096343f82"" />
+
+Done + unassigned -> Done
+<img width=""452"" alt=""image"" src=""https://github.com/user-attachments/assets/122d4150-a3f7-4195-9981-c66fbeceb2eb"" />
+
+In Progress + assigned -> In Progress
+<img width=""402"" alt=""image"" src=""https://github.com/user-attachments/assets/14bccb34-361e-4046-81e9-5909fea18732"" />
+
+assign-bot > assign-status-sync
+![image](https://github.com/user-attachments/assets/c5a64086-241c-40b9-b13f-9650630e8cb0)
+
+# 動作確認の結果
+
+- Organization(sasa-test-org)とAppsを作成
+- kouchou-aiと同じ名称のステータスをもつプロジェクト（kouchou-ai-copy）を用意
+- Assign/unassign に対するステータス変更結果は上記のとおり
+    - ログにある通りにステータス値が変わり、カンバンも移動することを確認
+    - assign / unassign は手動設定もスラッシュコマンドも両方通ることを確認
+
+# マージ前のチェックリスト（レビュアーがマージ前に確認してください）
+- [x] CIが全て通過している
+- [ ] 単体テストが実装されているか
+- [x] 今回実装した機能および影響を受けると思われる機能について、適切な動作確認が行われているかを確認する。
+
+動作確認の項目については、実装者による動作確認のケースが適切かを確認してください。
+必要に応じてレビュアー自身による動作確認を行っても良いですが、動作確認は必須ではありません。
+
+# CLAへの同意
+- 本リポジトリへのコントリビュートには、[コントリビューターライセンス契約（CLA）](https://github.com/digitaldemocracy2030/kouchou-ai/blob/main/CLA.md)に同意することが必須です。
+- [x] CLAの内容を読み、同意しました
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- **新機能**
+  - イシューのアサイン・アンサインに応じてプロジェクトのステータスを自動更新する機能を追加しました。
+  - イシューのステータスが「進行中」や「準備完了」などに連動して自動変更されます。
+  - アサイン操作に連動してステータス更新を行う新しいGitHub Actionsワークフローを複数導入しました。
+- **その他**
+  - ステータス更新処理に必要な依存パッケージを追加しました。
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",Workflow reporting,Pull request governance,Pull request governance,,
+https://github.com/dotCMS/core/pull/32710,Test failure comment feature,"### Proposed Changes
+* change 1
+* change 2
+
+### Checklist
+- [ ] Tests
+- [ ] Translations
+- [ ] Security Implications Contemplated (add notes if applicable)
+
+### Additional Info
+** any additional useful context or info **
+
+### Screenshots
+Original             |  Updated
+:-------------------------:|:-------------------------:
+** original screenshot **  |  ** updated screenshot **",Pull request governance,Action version update,Pull request governance,,
+https://github.com/effekseer/Effekseer/pull/1049,Replace runtime release scripts with Python,"## Summary
+- remove `release_cpp.bat` and `release_cpp.sh`
+- add cross‐platform `release_cpp.py`
+- call the new script in GitHub Actions
+- document the new workflow
+
+## Testing
+- `python3 -m unittest Script/test_screenshot.py -v`",tool migration,runtime migration,runtime migration,,
+https://github.com/effekseer/Effekseer/pull/1050,Replace runtime release scripts with Python,"## Summary
+- remove `release_cpp.bat` and `release_cpp.sh`
+- add cross-platform `release_cpp.py`
+- call the new script in GitHub Actions
+- document the new workflow
+- fix macOS packaging symlink issue
+
+## Testing
+- `python3 -m unittest Script/test_screenshot.py -v`",tool migration,runtime migration,runtime migration,,
+https://github.com/effekseer/Effekseer/pull/1059,Remove legacy release scripts,"## Summary
+- remove batch and shell scripts for tool release
+- support Windows and Linux in `release_tool.py`
+- update workflow to use Python script on Linux
+
+## Testing
+- `python3 -m py_compile release_tool.py`",tool migration,runtime migration,runtime migration,,
+https://github.com/ensdomains/ens-app-v3/pull/953,ci: optimize workflow with reusable setup and parallel jobs,,Build speed optimization,task decomposition,task decomposition,,
+https://github.com/estruyf/vscode-demo-time/pull/127,Merge pull request #126 from estruyf/dev,Time for v1.4.0,publish & release task addition,Matrix Coverage Expansion,publish & release task addition,,
+https://github.com/estruyf/vscode-demo-time/pull/148,Switch tests to Jest,"## Summary
+- replace Mocha with Jest for running tests
+- update test script and dev dependencies
+- document Jest usage in README
+- add Jest configuration and update existing test
+
+## Testing
+- `npm test`
+- `npm run lint`
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_68428f399aac832d9273990ddee143c5",test task addition,tool migration,tool migration,,
+https://github.com/featureform/enrichmcp/pull/52,Fix CI for async tests,"## Summary
+- run tests only for non-draft PRs
+- include `aiosqlite` so async SQLAlchemy tests pass
+
+## Testing
+- `make ci-setup`
+- `make ci-test`
+
+------
+https://chatgpt.com/codex/tasks/task_e_684b0018e2d0832a95117a3cf092ef4a",Conditional execution configuration,resources access restriction,Conditional execution configuration,,
+https://github.com/featureform/enrichmcp/pull/78,Fix caching for Python 3.13,"## Summary
+- adjust CI workflow to skip `pip` caching on Python 3.13
+
+## Testing
+- `make ci-lint`
+- `make ci-test`
+
+------
+https://chatgpt.com/codex/tasks/task_e_6854255b7abc832aa9f539335cdaa25f",cache config fix,Build environment configuration,cache config fix,,
+https://github.com/featureform/enrichmcp/pull/87,Fix uv docs build workflow,"## Summary
+- use `uv pip --system --break-system-packages` when installing dev deps
+
+## Testing
+- `pre-commit run --files .github/workflows/docs.yml .github/workflows/release.yml .github/workflows/test-publish.yml`
+
+------
+https://chatgpt.com/codex/tasks/task_e_6855e1292690832a8a588a3f62e57b44",package manager fix,dependency configuration,package manager fix,,
+https://github.com/featureform/enrichmcp/pull/89,Run examples with all Python versions,"## Summary
+- integrate example tests directly into `make ci-test`
+- run examples for each Python version in CI
+
+## Testing
+- `make ci-test`
+
+------
+https://chatgpt.com/codex/tasks/task_e_6855e824a940832a9ab40e7c2f083b24",Matrix Coverage Expansion,redundant task removal,Matrix Coverage Expansion,,
+https://github.com/getsentry/sentry-dart/pull/3080,Automate Sentry JS SDK version updates,Add JS SDK updater so we can continuously keep the used version up to date,dependency configuration,Version consistency,Version consistency,,
+https://github.com/giselles-ai/giselle/pull/1330,Upgrade to Biome v2,,Environment tooling update,Action version update,Action version update,,
+https://github.com/gluesql/gluesql/pull/1645,Fix publish rust workflow,"Ok, now it is expected to all the publish workflow including Rust crates.io work!",fix step input,test code fix,package manager fix,,
+https://github.com/gluesql/gluesql/pull/1649,Add redb storage to publish-rust.yml workflow,"## Summary
+- include `gluesql-redb-storage` in the Rust publish workflow
+
+## Testing
+- `cargo fmt --all`
+- `cargo clippy --all-targets -- -D warnings`
+
+------
+https://chatgpt.com/codex/tasks/task_e_68568cc12c54832a832e19def44961fe",publish & release task addition,dependency configuration,publish & release task addition,,
+https://github.com/go-vikunja/vikunja/pull/875,wip: sirv-cli instead of vite preview,,test configuration,tool migration,tool migration,,
+https://github.com/go-vikunja/vikunja/pull/999,Fix frontend version in release builds,"## Summary
+- inject `RELEASE_VERSION` into `version.json` during frontend build job
+
+## Testing
+- `mage lint:fix`
+- `pnpm lint:fix`
+
+------
+https://chatgpt.com/codex/tasks/task_e_685a53e368a48322b4a11db10e534ff3",Build environment configuration,Version consistency,Version consistency,,
+https://github.com/hyperlight-dev/hyperlight/pull/512,Add CI job to verify all Rust files have license headers,"This PR adds a mechanism to verify that all Rust source files in the repository have the appropriate license header.
+
+### Changes:
+
+- Created a shell script `dev/check-license-headers.sh` that scans all Rust files for the Apache 2.0 license header
+- The script automatically excludes auto-generated files (those with `@generated` or `Automatically generated` markers)
+- Added a new job to the `ValidatePullRequest.yml` workflow to run this check as part of CI
+- Fixed some example files that were missing license headers:
+  - `src/hyperlight_host/src/hypervisor/crashdump.rs`
+  - `src/hyperlight_host/src/func/utils.rs`
+  - `src/hyperlight_common/src/outb.rs`
+- Added a `check-license-headers` target to the Justfile for easy local validation
+
+To run the check locally:
+```bash
+just check-license-headers
+```
+
+Fixes #502.
+
+---
+
+💡 You can make Copilot smarter by setting up custom instructions, customizing its development environment and configuring Model Context Protocol (MCP) servers. Learn more [Copilot coding agent tips](https://gh.io/copilot-coding-agent-tips) in the docs.",lint task addition,test task addition,lint task addition,,
+https://github.com/hyperlight-dev/hyperlight/pull/545,Creates `hyperlight-guest-bin` crate,"This PR splits the `hyperlight_guest` crate into two:
+(1) The core `hyperlight_guest`  crate: It provides only the essential building blocks for interacting with the host environment, including the VM exit mechanism (`outb`), abstractions for calling host functions and receiving return values, and the input/output stacks used for guest-host communication. This is the kind of crate that custom guests (e.g., Nanvix) can use to avoid duplicating code.
+(2) **NEW** The `hyperlight_guest_bin` crate: This crate contains the opinionated bits of the guest library, such as the panic handler, the entry point, the guest logger, the exception handling logic, and third_party code used by our C-API.
+
+Below is a diagram to help illustrate how guests can rely on functionalities of each crate.
+![image](https://github.com/user-attachments/assets/040d1c09-8e66-46db-ac10-16a52af90c0a)
+
+It might help to review this PR commit-by-commit.",publish & release task addition,syntax error,publish & release task addition,,
+https://github.com/hyperlight-dev/hyperlight/pull/590,Update Crate descriptions for guest crates,"Add verification of crate versions for new crates to Crate Publish job
+
+Amend the order of crate publishing to account for dependencies
+
+Updates Crate descriptions for guest crates",dependency config fix,syntax error,publish & release task addition,,
+https://github.com/hyperlight-dev/hyperlight/pull/641,Make benchmarks only run with release builds,"This PR enforces that benchmarks can only be run with release builds, preventing execution with debug builds which would provide inconsistent and misleading performance data.
+
+## Changes Made
+
+### 1. Updated Justfile Commands
+- Removed `target` parameter from `bench` and `bench-ci` commands
+- Hard-coded both commands to use `--profile=release`
+- Added explanatory comments about release-only requirement
+
+**Before:**
+```just
+bench target=default-target features="""":
+    cargo bench --profile={{ if target == ""debug"" { ""dev"" } else { target } }} {{ if features =="""" {''} else { ""--features "" + features } }} -- --verbose
+```
+
+**After:**
+```just
+# Benchmarks only run with release builds for performance consistency  
+bench features="""":
+    cargo bench --profile=release {{ if features =="""" {''} else { ""--features "" + features } }} -- --verbose
+```
+
+### 2. Added Compile-Time Enforcement
+Added a compile-time check in the benchmark source code that prevents compilation in debug mode:
+
+```rust
+// Benchmarks are only meaningful and should only run with release builds.
+// Debug builds have different performance characteristics and would not provide
+// useful benchmarking data for performance regression testing.
+#[cfg(debug_assertions)]
+compile_error!(""Benchmarks must be run with release builds only. Use `cargo bench --release` or `just bench`."");
+```
+
+### 3. Updated GitHub Workflows
+- **Benchmarks.yml**: Removed `release` parameter from `bench-ci` call (now defaults to release)
+- **dep_rust.yml**: Removed `${{ matrix.config }}` parameter from `bench-ci` call (already had release-only guard)
+
+### 4. Updated Documentation
+Updated `docs/benchmarking-hyperlight.md` to reflect that only release builds are supported, removing references to debug benchmark support.
+
+## Validation
+
+All changes have been tested to ensure:
+- ✅ Debug benchmark compilation fails with clear error message
+- ✅ Release benchmark compilation succeeds  
+- ✅ `just bench` and `just bench-ci` commands use release profile
+- ✅ GitHub workflows updated correctly
+- ✅ All existing functionality preserved
+
+This ensures benchmarks provide consistent, meaningful performance data for regression testing while preventing accidental execution with debug builds.
+
+Fixes #638.
+
+<!-- START COPILOT CODING AGENT TIPS -->
+---
+
+💬 Share your feedback on Copilot coding agent for the chance to win a $200 gift card! Click [here](https://survey.alchemer.com/s3/8343779/Copilot-Coding-agent) to start the survey.",test configuration,resources access restriction,Conditional execution configuration,,
+https://github.com/janbjorge/pgqueuer/pull/401,"Revert ""Breaking: Drop python 3.10 support (#384)""",This reverts commit 2af11428463ec593fa94262de9be3b86f41872c6.,Matrix Coverage Expansion,Version consistency,Version consistency,,
+https://github.com/jdx/mise/pull/5579,feat: custom backends through plugins,"Add support for vfox plugins that implement backend hooks, allowing
+plugins to provide custom implementations for version listing, installation,
+and environment setup. This enables more flexible plugin architectures
+while maintaining backward compatibility with traditional vfox plugins.
+
+- Add BackendExecEnvContext, BackendInstallContext, and BackendListVersionsContext
+- Enhance VfoxBackend to support both traditional and backend-only plugins
+- Add new backend hook types in vfox crate
+- Include comprehensive test coverage for vfox backend functionality
+- Update plugin system to handle vfox backend plugin types",Build environment configuration,lint task addition,Build environment configuration,,
+https://github.com/jdx/mise/pull/5717,fix: ppa releases,"Fix PPA build by correcting source tarball path handling.
+
+The previous script failed to find the source tarball during extraction due to incorrect relative paths after multiple directory changes. This fix stores the original directory, uses it to return after submodule processing, and copies the tarball to a known absolute path (`/tmp/`) before extraction to ensure it's always found.
+
+---
+
+**Open Background Agent:** 
+
+[Web](https://www.cursor.com/agents?id=bc-46631f5b-b956-48a9-98e5-1e8745b1d14e) · [Cursor](https://cursor.com/background-agent?bcId=bc-46631f5b-b956-48a9-98e5-1e8745b1d14e)
+
+Refer to [Background Agent docs](https://docs.cursor.com/background-agents)",dependency config fix,syntax error,syntax error,,
+https://github.com/jdx/mise/pull/5767,fix(ci): correct hyperfine benchmark variance calculation,"The previous implementation incorrectly parsed hyperfine output and used a flawed formula to calculate performance variance, leading to false positives where benchmarks appeared slower when they were actually the same or faster.
+
+This fix:
+- Properly extracts the relative performance value from hyperfine output
+- Uses correct formula: (relative - 1) * 100 for percentage change
+- Clearly distinguishes between improvements (faster) and regressions (slower)
+- Only flags actual performance changes exceeding 10% threshold",test code fix,action refactoring,test code fix,benchmark configuration,
+https://github.com/joamag/boytacean/pull/17,Implement SDL caching in CI,"## Summary
+- cache SDL build outputs using actions/cache in `main.yml`
+- revert caching changes from `deploy.yml` and `extra.yml`
+
+## Testing
+- `cargo test`
+
+------
+https://chatgpt.com/codex/tasks/task_e_68449fd1c2d883289dcb500367ad3cc4
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **Chores**
+  - Improved build workflow by adding caching for SDL dependencies to speed up GitHub Actions runs.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",caching implementation,Build environment configuration,caching implementation,,
+https://github.com/langfuse/langfuse-docs/pull/1475,ci: check that md and mdx docs have at most one h1,"<!-- ELLIPSIS_HIDDEN -->
+
+
+> [!IMPORTANT]
+> Adds a CI job to check markdown/MDX files for at most one H1 heading using a new script.
+> 
+>   - **CI Workflow**:
+>     - Adds `check_h1` job in `.github/workflows/ci.yml` to ensure markdown and MDX files have at most one H1 heading.
+>     - Job runs on `ubuntu-latest` and requires Node.js setup.
+>   - **Script**:
+>     - New script `scripts/check-h1-headings.js` to check H1 heading count in markdown/MDX files.
+>     - Excludes directories like `node_modules`, `.git`, `.next`, and `dist`.
+>     - Handles code blocks to avoid counting H1s within them.
+>     - Logs files with multiple H1s and exits with error if any are found.
+> 
+> <sup>This description was created by </sup>[<img alt=""Ellipsis"" src=""https://img.shields.io/badge/Ellipsis-blue?color=175173"">](https://www.ellipsis.dev?ref=langfuse%2Flangfuse-docs&utm_source=github&utm_medium=referral)<sup> for 1392f930ba4652a824cf673456505e14cf57aeba. You can [customize](https://app.ellipsis.dev/langfuse/settings/summaries) this summary. It will automatically update as commits are pushed.</sup>
+
+
+<!-- ELLIPSIS_HIDDEN -->",lint task addition,test task addition,lint task addition,,
+https://github.com/langfuse/langfuse-docs/pull/1777,ci: Add consolidated ci check,"<!-- ELLIPSIS_HIDDEN -->
+
+
+
+> [!IMPORTANT]
+> Adds `all-checks-pass` job to CI workflow for consolidated status check.
+> 
+>   - **CI Workflow**:
+>     - Adds `all-checks-pass` job in `.github/workflows/ci.yml`.
+>     - `all-checks-pass` depends on `pre-job`, `check_h1`, `check-notebook-docs-sync`, `build-and-check-links`, and `check-sitemap-links`.
+>     - Job runs on `ubuntu-latest` and always executes.
+>     - Exits with success if no failures in dependencies, otherwise exits with failure.
+> 
+> <sup>This description was created by </sup>[<img alt=""Ellipsis"" src=""https://img.shields.io/badge/Ellipsis-blue?color=175173"">](https://www.ellipsis.dev?ref=langfuse%2Flangfuse-docs&utm_source=github&utm_medium=referral)<sup> for fd87bfd3448c442b3938f50dba4a2623766e69a4. You can [customize](https://app.ellipsis.dev/langfuse/settings/summaries) this summary. It will automatically update as commits are pushed.</sup>
+
+<!-- ELLIPSIS_HIDDEN -->",Pull request governance,Workflow reporting,Workflow reporting,,
+https://github.com/langfuse/langfuse-docs/pull/1778,ci: check whole repo for changes after rerunning cookbook script,"Expand CI check for cookbook documentation to cover the entire repository and remove an unnecessary backup.
+<!-- ELLIPSIS_HIDDEN -->
+
+----
+
+> [!IMPORTANT]
+> Expand CI cookbook documentation check to cover entire repository and remove unnecessary backup in `ci.yml`.
+> 
+>   - **CI Workflow**:
+>     - In `.github/workflows/ci.yml`, expand the `check-notebook-docs-sync` job to check the entire repository for changes after running `scripts/update_cookbook_docs.sh`.
+>     - Remove the backup creation step for `pages/guides/cookbook`.
+>     - Update the change detection to use `git status --porcelain` for staged, unstaged, or untracked files.
+> 
+> <sup>This description was created by </sup>[<img alt=""Ellipsis"" src=""https://img.shields.io/badge/Ellipsis-blue?color=175173"">](https://www.ellipsis.dev?ref=langfuse%2Flangfuse-docs&utm_source=github&utm_medium=referral)<sup> for 8b15c1ba2e7b2af419f09f3b0cb1f48c31be9f9a. You can [customize](https://app.ellipsis.dev/langfuse/settings/summaries) this summary. It will automatically update as commits are pushed.</sup>
+
+<!-- ELLIPSIS_HIDDEN -->",Conditional execution configuration,Version consistency,Workflow reporting,,
+https://github.com/langfuse/langfuse/pull/7845,ci: all-ci-passed also checks for cancelled status,"<!-- ELLIPSIS_HIDDEN -->
+
+
+
+> [!IMPORTANT]
+> Update CI/CD pipeline to treat 'cancelled' status as a failure in `all-ci-passed` job.
+> 
+>   - **CI/CD Pipeline**:
+>     - In `.github/workflows/pipeline.yml`, updated `all-ci-passed` job to treat 'cancelled' status as a failure.
+>     - Modified `if` conditions for `Successful deploy` and `Failing deploy` steps to include `cancelled` status check.
+> 
+> <sup>This description was created by </sup>[<img alt=""Ellipsis"" src=""https://img.shields.io/badge/Ellipsis-blue?color=175173"">](https://www.ellipsis.dev?ref=langfuse%2Flangfuse&utm_source=github&utm_medium=referral)<sup> for 89090719906604fa85fc0b6328bb4e6dae888d90. You can [customize](https://app.ellipsis.dev/langfuse/settings/summaries) this summary. It will automatically update as commits are pushed.</sup>
+
+<!-- ELLIPSIS_HIDDEN -->",Conditional execution configuration,build waste optimization,Workflow reporting,,
+https://github.com/langfuse/langfuse/pull/7854,perf: enable API Key and Prompt caching in redis by default,"<!-- ELLIPSIS_HIDDEN -->
+
+
+> [!IMPORTANT]
+> Enable Redis caching for API keys and prompts by default, adjust TTL values, and implement safe key deletion in cluster mode.
+> 
+>   - **Behavior**:
+>     - Enable Redis caching for API keys and prompts by default in `env.ts` and `env.mjs`.
+>     - Change default TTL for `LANGFUSE_CACHE_PROMPT_TTL_SECONDS` and `LANGFUSE_CACHE_API_KEY_TTL_SECONDS` to 300 seconds in `env.ts` and `env.mjs`.
+>     - Remove explicit cache enabling in `pipeline.yml` and `jest.config.mjs`.
+>   - **Redis Operations**:
+>     - Add `safeMultiDel()` in `redis.ts` for safe key deletion in cluster mode.
+>     - Use `safeMultiDel()` in `PromptService` and `ApiAuthService` for cache invalidation.
+>   - **PromptService**:
+>     - Modify constructor in `PromptService` to enable caching based on environment variable.
+>     - Update `invalidateCache()` to use `safeMultiDel()` for key deletion.
+>   - **ApiAuthService**:
+>     - Use `safeMultiDel()` for invalidating API keys in Redis.
+>   - **Tests**:
+>     - Update `promptCache.servertest.ts` to reflect new TTL and caching behavior.
+> 
+> <sup>This description was created by </sup>[<img alt=""Ellipsis"" src=""https://img.shields.io/badge/Ellipsis-blue?color=175173"">](https://www.ellipsis.dev?ref=langfuse%2Flangfuse&utm_source=github&utm_medium=referral)<sup> for 7f6ccb58a74ecd63c67a14c2cf292552c9ff3992. You can [customize](https://app.ellipsis.dev/langfuse/settings/summaries) this summary. It will automatically update as commits are pushed.</sup>
+
+
+<!-- ELLIPSIS_HIDDEN -->",test configuration,redundant task removal,cache config fix,,
+https://github.com/langfuse/langfuse/pull/7944,chore: fix snyk tags,"<!-- ELLIPSIS_HIDDEN -->
+
+
+> [!IMPORTANT]
+> Updated `snyk.yml` to modify workflow triggers, concurrency settings, Docker image names, and `sed` command syntax.
+> 
+>   - **Workflow Triggers**:
+>     - Removed `pull_request` trigger, leaving only `push` trigger for `main` branch in `snyk.yml`.
+>   - **Concurrency**:
+>     - Set `cancel-in-progress` to `false` in `snyk.yml`.
+>   - **Docker Image Names**:
+>     - Changed Docker image names from `langfuse-langfuse-web` to `langfuse/langfuse` and `langfuse-langfuse-worker` to `langfuse/langfuse-worker` in `snyk.yml`.
+>   - **Sed Command Syntax**:
+>     - Updated `sed` command syntax for replacing `security-severity` values in `snyk.sarif` in `snyk.yml`.
+> 
+> <sup>This description was created by </sup>[<img alt=""Ellipsis"" src=""https://img.shields.io/badge/Ellipsis-blue?color=175173"">](https://www.ellipsis.dev?ref=langfuse%2Flangfuse&utm_source=github&utm_medium=referral)<sup> for f52d29152b0cccebd1162f45460f28788e88efcc. You can [customize](https://app.ellipsis.dev/langfuse/settings/summaries) this summary. It will automatically update as commits are pushed.</sup>
+
+
+<!-- ELLIPSIS_HIDDEN -->",syntax error,resources access restriction,syntax error,,
+https://github.com/lingodotdev/lingo.dev/pull/683,fix: update PHP SDK workflow,"# Fix PHP SDK Workflow
+
+- Fix PHPUnit path in test job
+- Update commit author to Lingo.dev <hi@lingo.dev>
+
+Fixes the failing workflow after PR #682 was merged.
+
+Link to Devin run: https://app.devin.ai/sessions/0c1c7a8ae9604c4fa3877933f51b7c61
+Requested by: Max Prilutskiy",test code fix,syntax error,syntax error,,
+https://github.com/lingodotdev/lingo.dev/pull/692,fix: update Packagist publish action to use correct action name and parameters,"# Fix Packagist Publishing Action
+
+This PR fixes the PHP SDK publishing workflow by updating the Packagist publish action to use the correct action name and parameters.
+
+## Changes
+- Updated the Packagist publish action from `wscourge/packagist-publish@v1` to `wscourge/gha-packagist-publish@v1.0`
+- Added the required `package_name` parameter to the action configuration
+
+## Link to Devin run
+https://app.devin.ai/sessions/0c1c7a8ae9604c4fa3877933f51b7c61
+
+## Requested by
+Max Prilutskiy (max@lingo.dev)",fix step input,syntax error,syntax error,,
+https://github.com/lingodotdev/lingo.dev/pull/695,fix: PHP packagist publishing script error,"# Fix PHP packagist publishing script error
+
+## Issue
+The PHP packagist publishing workflow was failing with the error ""Command 'semver' is not defined"" when trying to use `composer semver` for version bumping.
+
+## Fix
+- Replaced the `composer semver` command with direct PHP version manipulation
+- Removed the non-existent `composer-semver` tool from the PHP setup step
+
+## Testing
+The fix should be verified when the workflow runs on the next push to main that affects the PHP SDK.
+
+Link to Devin run: https://app.devin.ai/sessions/b645cd58d26f45afb714a736ec4d758e
+User: Max Prilutskiy (max@lingo.dev)",package manager fix,Version consistency,package manager fix,,
+https://github.com/lingodotdev/lingo.dev/pull/702,fix: ensure PHP SDK version persistence and validation,"# Fix PHP SDK version persistence and validation
+
+## Issue
+The PHP packagist publishing workflow was failing with a version validation error:
+```
+""./composer.json"" does not match the expected JSON schema:
+- version : Does not match the regex pattern ^v?\d+(\.\d+){0,3}|^dev-
+```
+
+The version field in composer.json was being reset to empty, causing validation failures.
+
+## Fix
+- Set the version back to ""0.1.0"" in the PHP SDK composer.json file
+- Modified the workflow to handle empty or invalid version values:
+  - Added validation to check for empty versions and set a default of ""0.1.0""
+  - Added regex validation to ensure version format matches the required pattern
+  - Updated version bumping logic to handle edge cases
+
+## Testing
+The fix should be verified when the workflow runs on the next push to main that affects the PHP SDK.
+
+Link to Devin run: https://app.devin.ai/sessions/b645cd58d26f45afb714a736ec4d758e
+User: Max Prilutskiy (max@lingo.dev)",package manager fix,Version consistency,Version consistency,,
+https://github.com/lingodotdev/lingo.dev/pull/703,fix: add monorepo split for PHP SDK Packagist publishing,"# Fix PHP SDK Packagist publishing from monorepo subdirectory
+
+## Issue
+The PHP packagist publishing workflow was failing with the error ""No composer.json was found in the main branch"" because Packagist requires composer.json to be at the repository root, but our PHP SDK is in a subdirectory (php/sdk/).
+
+## Fix
+- Added the monorepo-split-github-action to create a separate repository just for the PHP SDK
+- Modified the packagist-publish.php script to use the split repository URL
+- Added environment variable support for the repository URL
+
+## Testing
+The fix should be verified when the workflow runs on the next push to main that affects the PHP SDK.
+
+Link to Devin run: https://app.devin.ai/sessions/b645cd58d26f45afb714a736ec4d758e
+User: Max Prilutskiy (max@lingo.dev)",publish & release task addition,NEEDS_REVIEW: mono repo split,publish & release task addition,,
+https://github.com/lingodotdev/lingo.dev/pull/706,fix: implement Composer Path Repository for PHP SDK publishing,"# Fix PHP SDK Packagist publishing with Composer Path Repository
+
+## Issue
+The PHP packagist publishing workflow was failing because Packagist requires composer.json to be at the repository root, but our PHP SDK is in a subdirectory (php/sdk/).
+
+## Fix
+Implemented the Composer Path Repository approach:
+- Created a root composer.json file that references the PHP SDK in the subdirectory
+- Configured a path repository pointing to the PHP SDK directory
+- Updated the workflow to install dependencies from the root composer.json
+- Added version validation to ensure the PHP SDK always has a valid version
+
+## How It Works
+1. The root composer.json defines a path repository that points to the php/sdk directory
+2. When Packagist scans the repository, it finds the composer.json at the root
+3. The workflow installs dependencies from the root, which creates a vendor directory with the PHP SDK
+4. The version is still managed in the PHP SDK's composer.json for proper versioning
+
+## Testing
+The fix should be verified when the workflow runs on the next push to main that affects the PHP SDK.
+
+Link to Devin run: https://app.devin.ai/sessions/b645cd58d26f45afb714a736ec4d758e
+User: Max Prilutskiy (max@lingo.dev)",package manager fix,Version consistency,Version consistency,,
+https://github.com/lingodotdev/lingo.dev/pull/726,fix: php sdk publishing workflow,"# PHP SDK Publishing Workflow Fix
+
+## Problem
+The current PHP SDK publishing workflow was failing at the ""Install dependencies for SDK"" step because the version field validation was happening before the workflow had a chance to set a valid version.
+
+## Solution
+1. Moved the version check and setting logic to occur before the composer install step
+2. Set a default version in the PHP SDK's composer.json
+3. Added better error handling for version bumping
+4. Added debug logging for Packagist publishing
+   
+This fix ensures that on every push to main affecting the PHP SDK, a new version will be automatically published to Packagist with an incremented patch version.
+
+Link to Devin run: https://app.devin.ai/sessions/6407d462e80c47b4b98a7af1e3565247
+User: Max Prilutskiy (max@lingo.dev)",dependency config fix,Version consistency,Version consistency,,
+https://github.com/lingodotdev/lingo.dev/pull/730,fix: use --no-check-publish flag for composer validation,"# Fix PHP SDK Publishing Workflow Validation
+
+## Problem
+The PHP SDK publishing workflow is failing at the ""Validate composer.json"" step because the strict validation doesn't allow the version field in packages published on Packagist.
+
+## Solution
+Modified the composer validation step to use the `--no-check-publish` flag instead of `--strict`, which allows the version field to be present while still validating the overall structure of the composer.json file.
+
+This fix ensures that the PHP SDK publishing workflow can continue to run successfully while maintaining the version field needed for automatic version bumping.
+
+Link to Devin run: https://app.devin.ai/sessions/6407d462e80c47b4b98a7af1e3565247
+User: Max Prilutskiy (max@lingo.dev)",fix step input,Build environment configuration,Environment tooling update,,
+https://github.com/marimo-team/marimo/pull/4013,Add Python 3.13 support,"This PR adds support for Python 3.13 in pyproject.toml.
+
+- Added Python 3.13 to the classifiers list in pyproject.toml
+- Removed Python 3.13 from GitHub Actions workflows as it's currently only available as alpha versions
+
+Link to Devin run: https://app.devin.ai/sessions/747c72026cc547c7b97966593049f6d9",Build environment configuration,Environment tooling update,Matrix Coverage Expansion,,
+https://github.com/mcpgod/cli/pull/18,Publish to npm on merge,"## Summary
+- build and publish to npm as part of push-to-main workflow
+- allow manual npm publish via workflow dispatch
+- check npm registry before publishing and lint workflow files
+- document publishing secrets
+- fix actionlint workflow
+- add local actionlint runner
+
+## Testing
+- `npm test`
+- `npm run lint:workflows`
+- `npx node-actionlint .github/workflows/onPushToMain.yml`
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_684c55432b1c8321a94fc55c5d0ee563",publish & release task addition,lint task addition,lint task addition,,
+https://github.com/mcpgod/cli/pull/20,Fix release workflow output,"## Summary
+- ensure release workflow outputs a tag for the release step
+
+## Testing
+- `npm test`
+
+------
+https://chatgpt.com/codex/tasks/task_e_684ca7851c44832189f75f94cdcb2f8a",fix step input,Workflow reporting,Workflow reporting,,
+https://github.com/mediar-ai/terminator/pull/133,add dockerfile and fix publish-mcp.yml,Ref: https://github.com/mediar-ai/terminator/actions/runs/15784039664/job/44496382227,Build environment configuration,test configuration,Dependencies expansion,,
+https://github.com/mediar-ai/terminator/pull/138,fix(mcp): binary missing from platform packages,"macos-13 have intel cpu
+macos-14 have arm64 cpu",artifact configuration,Version consistency,artifact configuration,,
+https://github.com/mediar-ai/terminator/pull/185,Refactor MCP server for always condition,"## Pull Request Template
+
+### Description
+Enhances the `publish-mcp.yml` workflow for improved robustness. This PR ensures critical steps like artifact upload and process cleanup execute even if smoke tests fail, and makes the overall publish job more resilient to partial build failures across different platforms.
+
+### Type of Change
+- [ ] Bug fix
+- [x] New feature  
+- [ ] Breaking change
+- [ ] Documentation update
+- [ ] Other:
+
+### Video Demo (Recommended)
+🎥 **Please include a video demo** showing your changes in action! We might use it to post on social media and grow the community.
+
+**Suggested editing tools:**
+- [Cap.so](https://cap.so/)
+- [Screen.studio](https://screen.studio/)
+- [CapCut](https://www.capcut.com/)
+- [Kapwing](https://www.kapwing.com/)
+- [Descript](https://www.descript.com/)
+
+
+### AI Review & Code Quality
+- [x] I asked AI to critique my PR and incorporated feedback
+- [x] I formatted my code properly
+- [x] I tested my changes locally
+
+### Checklist
+- [x] Code follows project style guidelines
+- [ ] Added video demo (recommended)
+- [ ] Updated documentation if needed
+
+### Additional Notes
+The changes ensure better debugging capabilities (artifacts are always uploaded) and more reliable resource cleanup. Smoke tests have also been added for Linux and macOS platforms.",Conditional execution configuration,test task addition,test task addition,,
+https://github.com/mediar-ai/terminator/pull/44,Add CI build workflow,"## Summary
+- add `ci.yml` workflow to compile the Rust workspace on Mac and Windows
+
+## Testing
+- `cargo check` *(fails: failed to clone git dependency)*
+- `cargo fmt --all -- --check` *(fails: `cargo-fmt` is not installed)*",build task addition,Build environment configuration,build task addition,,
+https://github.com/mlflow/mlflow/pull/16125,Replace `insert` with `merge_records` for dataset,"<details><summary>&#x1F6E0 DevTools &#x1F6E0</summary>
+<p>
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/smoorjani/mlflow/pull/16125?quickstart=1)
+
+#### Install mlflow from this PR
+
+```
+# mlflow
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16125/merge
+# mlflow-skinny
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16125/merge#subdirectory=skinny
+```
+
+For Databricks, use the following command:
+
+```
+%sh curl -LsSf https://raw.githubusercontent.com/mlflow/mlflow/HEAD/dev/install-skinny.sh | sh -s pull/16125/merge
+```
+
+</p>
+</details>
+
+### Related Issues/PRs
+
+<!-- Uncomment 'Resolve' if this PR can close the linked items. -->
+<!-- Resolve --> #xxx
+
+### What changes are proposed in this pull request?
+
+<!-- Please fill in changes proposed in this PR. -->
+This PR replaces `insert` with `merge_records` for the dataset. As part of this, we need to update the wheel version (since this is a new change) and update the unit tests.
+
+### How is this PR tested?
+
+- [x] Existing unit/integration tests
+- [ ] New unit/integration tests
+- [ ] Manual tests
+
+<!-- Attach code, screenshot, video used for manual testing here. -->
+
+### Does this PR require documentation update?
+
+- [ ] No. You can skip the rest of this section.
+- [x] Yes. I've updated:
+  - [ ] Examples
+  - [x] API references
+  - [ ] Instructions
+
+### Release Notes
+
+#### Is this a user-facing change?
+
+- [x] No. You can skip the rest of this section.
+- [ ] Yes. Give a description of this change to be included in the release notes for MLflow users.
+
+<!-- Details in 1-2 sentences. You can just refer to another PR with a description if this PR is part of a larger change. -->
+
+#### What component(s), interfaces, languages, and integrations does this PR affect?
+
+Components
+
+- [ ] `area/artifacts`: Artifact stores and artifact logging
+- [ ] `area/build`: Build and test infrastructure for MLflow
+- [ ] `area/deployments`: MLflow Deployments client APIs, server, and third-party Deployments integrations
+- [ ] `area/docs`: MLflow documentation pages
+- [ ] `area/examples`: Example code
+- [ ] `area/model-registry`: Model Registry service, APIs, and the fluent client calls for Model Registry
+- [ ] `area/models`: MLmodel format, model serialization/deserialization, flavors
+- [ ] `area/projects`: MLproject format, project running backends
+- [ ] `area/scoring`: MLflow Model server, model deployment tools, Spark UDFs
+- [ ] `area/server-infra`: MLflow Tracking server backend
+- [x] `area/tracking`: Tracking Service, tracking client APIs, autologging
+
+Interface
+
+- [ ] `area/uiux`: Front-end, user experience, plotting, JavaScript, JavaScript dev server
+- [ ] `area/docker`: Docker use across MLflow's components, such as MLflow Projects and MLflow Models
+- [ ] `area/sqlalchemy`: Use of SQLAlchemy in the Tracking Service or Model Registry
+- [ ] `area/windows`: Windows support
+
+Language
+
+- [ ] `language/r`: R APIs and clients
+- [ ] `language/java`: Java APIs and clients
+- [ ] `language/new`: Proposals for new client languages
+
+Integrations
+
+- [ ] `integrations/azure`: Azure and Azure ML integrations
+- [ ] `integrations/sagemaker`: SageMaker integrations
+- [ ] `integrations/databricks`: Databricks integrations
+
+<!--
+Insert an empty named anchor here to allow jumping to this section with a fragment URL
+(e.g. https://github.com/mlflow/mlflow/pull/123#user-content-release-note-category).
+Note that GitHub prefixes anchor names in markdown with ""user-content-"".
+-->
+
+<a name=""release-note-category""></a>
+
+#### How should the PR be classified in the release notes? Choose one:
+
+- [ ] `rn/none` - No description will be included. The PR will be mentioned only by the PR number in the ""Small Bugfixes and Documentation Updates"" section
+- [ ] `rn/breaking-change` - The PR will be mentioned in the ""Breaking Changes"" section
+- [ ] `rn/feature` - A new user-facing feature worth mentioning in the release notes
+- [ ] `rn/bug-fix` - A user-facing bug fix worth mentioning in the release notes
+- [ ] `rn/documentation` - A user-facing documentation change worth mentioning in the release notes
+
+#### Should this PR be included in the next patch release?
+
+`Yes` should be selected for bug fixes, documentation updates, and other small changes. `No` should be selected for new features and larger changes. If you're unsure about the release classification of this PR, leave this unchecked to let the maintainers decide.
+
+<details>
+<summary>What is a minor/patch release?</summary>
+
+- Minor release: a release that increments the second part of the version number (e.g., 1.2.0 -> 1.3.0).
+  Bug fixes, doc updates and new features usually go into minor releases.
+- Patch release: a release that increments the third part of the version number (e.g., 1.2.0 -> 1.2.1).
+  Bug fixes and doc updates usually go into patch releases.
+
+</details>
+
+<!-- patch -->
+
+- [x] Yes (this PR will be cherry-picked and included in the next patch release)
+- [ ] No (this PR will be included in the next minor release)",Version consistency,test configuration,test configuration,,
+https://github.com/mlflow/mlflow/pull/16439,MLflow Telemetry,"<details><summary>&#x1F6E0 DevTools &#x1F6E0</summary>
+<p>
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/serena-ruan/mlflow/pull/16439?quickstart=1)
+
+#### Install mlflow from this PR
+
+```
+# mlflow
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16439/merge
+# mlflow-skinny
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16439/merge#subdirectory=skinny
+```
+
+For Databricks, use the following command:
+
+```
+%sh curl -LsSf https://raw.githubusercontent.com/mlflow/mlflow/HEAD/dev/install-skinny.sh | sh -s pull/16439/merge
+```
+
+</p>
+</details>
+
+### Related Issues/PRs
+
+<!-- Uncomment 'Resolve' if this PR can close the linked items. -->
+<!-- Resolve --> #xxx
+
+### What changes are proposed in this pull request?
+
+### TODO: add one page on website explaining this before this PR is merged
+
+<!-- Please fill in changes proposed in this PR. -->
+
+### How is this PR tested?
+
+- [ ] Existing unit/integration tests
+- [ ] New unit/integration tests
+- [ ] Manual tests
+
+<!-- Attach code, screenshot, video used for manual testing here. -->
+
+### Does this PR require documentation update?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. I've updated:
+  - [ ] Examples
+  - [ ] API references
+  - [ ] Instructions
+
+### Release Notes
+
+#### Is this a user-facing change?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. Give a description of this change to be included in the release notes for MLflow users.
+
+<!-- Details in 1-2 sentences. You can just refer to another PR with a description if this PR is part of a larger change. -->
+
+#### What component(s), interfaces, languages, and integrations does this PR affect?
+
+Components
+
+- [ ] `area/artifacts`: Artifact stores and artifact logging
+- [ ] `area/build`: Build and test infrastructure for MLflow
+- [ ] `area/deployments`: MLflow Deployments client APIs, server, and third-party Deployments integrations
+- [ ] `area/docs`: MLflow documentation pages
+- [ ] `area/examples`: Example code
+- [ ] `area/model-registry`: Model Registry service, APIs, and the fluent client calls for Model Registry
+- [ ] `area/models`: MLmodel format, model serialization/deserialization, flavors
+- [ ] `area/projects`: MLproject format, project running backends
+- [ ] `area/scoring`: MLflow Model server, model deployment tools, Spark UDFs
+- [ ] `area/server-infra`: MLflow Tracking server backend
+- [ ] `area/tracking`: Tracking Service, tracking client APIs, autologging
+
+Interface
+
+- [ ] `area/uiux`: Front-end, user experience, plotting, JavaScript, JavaScript dev server
+- [ ] `area/docker`: Docker use across MLflow's components, such as MLflow Projects and MLflow Models
+- [ ] `area/sqlalchemy`: Use of SQLAlchemy in the Tracking Service or Model Registry
+- [ ] `area/windows`: Windows support
+
+Language
+
+- [ ] `language/r`: R APIs and clients
+- [ ] `language/java`: Java APIs and clients
+- [ ] `language/new`: Proposals for new client languages
+
+Integrations
+
+- [ ] `integrations/azure`: Azure and Azure ML integrations
+- [ ] `integrations/sagemaker`: SageMaker integrations
+- [ ] `integrations/databricks`: Databricks integrations
+
+<!--
+Insert an empty named anchor here to allow jumping to this section with a fragment URL
+(e.g. https://github.com/mlflow/mlflow/pull/123#user-content-release-note-category).
+Note that GitHub prefixes anchor names in markdown with ""user-content-"".
+-->
+
+<a name=""release-note-category""></a>
+
+#### How should the PR be classified in the release notes? Choose one:
+
+- [ ] `rn/none` - No description will be included. The PR will be mentioned only by the PR number in the ""Small Bugfixes and Documentation Updates"" section
+- [ ] `rn/breaking-change` - The PR will be mentioned in the ""Breaking Changes"" section
+- [x] `rn/feature` - A new user-facing feature worth mentioning in the release notes
+- [ ] `rn/bug-fix` - A user-facing bug fix worth mentioning in the release notes
+- [ ] `rn/documentation` - A user-facing documentation change worth mentioning in the release notes
+
+#### Should this PR be included in the next patch release?
+
+`Yes` should be selected for bug fixes, documentation updates, and other small changes. `No` should be selected for new features and larger changes. If you're unsure about the release classification of this PR, leave this unchecked to let the maintainers decide.
+
+<details>
+<summary>What is a minor/patch release?</summary>
+
+- Minor release: a release that increments the second part of the version number (e.g., 1.2.0 -> 1.3.0).
+  Bug fixes, doc updates and new features usually go into minor releases.
+- Patch release: a release that increments the third part of the version number (e.g., 1.2.0 -> 1.2.1).
+  Bug fixes and doc updates usually go into patch releases.
+
+</details>
+
+<!-- patch -->
+
+- [ ] Yes (this PR will be cherry-picked and included in the next patch release)
+- [x] No (this PR will be included in the next minor release)",test task addition,test configuration,test task addition,,
+https://github.com/mlflow/mlflow/pull/16640,Migrate `test-examples` step to GitHub Actions,"<details><summary>&#x1F6E0 DevTools &#x1F6E0</summary>
+<p>
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/harupy/mlflow/pull/16640?quickstart=1)
+
+#### Install mlflow from this PR
+
+```
+# mlflow
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16640/merge
+# mlflow-skinny
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16640/merge#subdirectory=skinny
+```
+
+For Databricks, use the following command:
+
+```
+%sh curl -LsSf https://raw.githubusercontent.com/mlflow/mlflow/HEAD/dev/install-skinny.sh | sh -s pull/16640/merge
+```
+
+</p>
+</details>
+
+### Related Issues/PRs
+
+<!-- Uncomment 'Resolve' if this PR can close the linked items. -->
+<!-- Resolve --> #xxx
+
+### What changes are proposed in this pull request?
+
+<!-- Please fill in changes proposed in this PR. -->
+
+Migrate `test-examples` step to GitHub Actions
+
+### How is this PR tested?
+
+- [x] Existing unit/integration tests
+- [ ] New unit/integration tests
+- [ ] Manual tests
+
+<!-- Attach code, screenshot, video used for manual testing here. -->
+
+### Does this PR require documentation update?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. I've updated:
+  - [ ] Examples
+  - [ ] API references
+  - [ ] Instructions
+
+### Release Notes
+
+#### Is this a user-facing change?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. Give a description of this change to be included in the release notes for MLflow users.
+
+<!-- Details in 1-2 sentences. You can just refer to another PR with a description if this PR is part of a larger change. -->
+
+#### What component(s), interfaces, languages, and integrations does this PR affect?
+
+Components
+
+- [ ] `area/artifacts`: Artifact stores and artifact logging
+- [ ] `area/build`: Build and test infrastructure for MLflow
+- [ ] `area/deployments`: MLflow Deployments client APIs, server, and third-party Deployments integrations
+- [ ] `area/docs`: MLflow documentation pages
+- [ ] `area/evaluation`: MLflow model evaluation features, evaluation metrics, and evaluation workflows
+- [ ] `area/examples`: Example code
+- [ ] `area/model-registry`: Model Registry service, APIs, and the fluent client calls for Model Registry
+- [ ] `area/models`: MLmodel format, model serialization/deserialization, flavors
+- [ ] `area/projects`: MLproject format, project running backends
+- [ ] `area/prompt`: MLflow prompt engineering features, prompt templates, and prompt management
+- [ ] `area/scoring`: MLflow Model server, model deployment tools, Spark UDFs
+- [ ] `area/server-infra`: MLflow Tracking server backend
+- [ ] `area/tracing`: MLflow Tracing features, tracing APIs, and LLM tracing functionality
+- [ ] `area/tracking`: Tracking Service, tracking client APIs, autologging
+
+Interface
+
+- [ ] `area/uiux`: Front-end, user experience, plotting, JavaScript, JavaScript dev server
+- [ ] `area/docker`: Docker use across MLflow's components, such as MLflow Projects and MLflow Models
+- [ ] `area/sqlalchemy`: Use of SQLAlchemy in the Tracking Service or Model Registry
+- [ ] `area/windows`: Windows support
+
+Language
+
+- [ ] `language/r`: R APIs and clients
+- [ ] `language/java`: Java APIs and clients
+- [ ] `language/new`: Proposals for new client languages
+
+Integrations
+
+- [ ] `integrations/azure`: Azure and Azure ML integrations
+- [ ] `integrations/sagemaker`: SageMaker integrations
+- [ ] `integrations/databricks`: Databricks integrations
+
+<!--
+Insert an empty named anchor here to allow jumping to this section with a fragment URL
+(e.g. https://github.com/mlflow/mlflow/pull/123#user-content-release-note-category).
+Note that GitHub prefixes anchor names in markdown with ""user-content-"".
+-->
+
+<a name=""release-note-category""></a>
+
+#### How should the PR be classified in the release notes? Choose one:
+
+- [x] `rn/none` - No description will be included. The PR will be mentioned only by the PR number in the ""Small Bugfixes and Documentation Updates"" section
+- [ ] `rn/breaking-change` - The PR will be mentioned in the ""Breaking Changes"" section
+- [ ] `rn/feature` - A new user-facing feature worth mentioning in the release notes
+- [ ] `rn/bug-fix` - A user-facing bug fix worth mentioning in the release notes
+- [ ] `rn/documentation` - A user-facing documentation change worth mentioning in the release notes
+
+#### Should this PR be included in the next patch release?
+
+`Yes` should be selected for bug fixes, documentation updates, and other small changes. `No` should be selected for new features and larger changes. If you're unsure about the release classification of this PR, leave this unchecked to let the maintainers decide.
+
+<details>
+<summary>What is a minor/patch release?</summary>
+
+- Minor release: a release that increments the second part of the version number (e.g., 1.2.0 -> 1.3.0).
+  Bug fixes, doc updates and new features usually go into minor releases.
+- Patch release: a release that increments the third part of the version number (e.g., 1.2.0 -> 1.2.1).
+  Bug fixes and doc updates usually go into patch releases.
+
+</details>
+
+<!-- patch -->
+
+- [ ] Yes (this PR will be cherry-picked and included in the next patch release)
+- [x] No (this PR will be included in the next minor release)",Platform migration,test task addition,test task addition,,
+https://github.com/mlflow/mlflow/pull/16678,Pin 'datasets<4.0.0' to avoid toxicity failure,"<details><summary>&#x1F6E0 DevTools &#x1F6E0</summary>
+<p>
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/serena-ruan/mlflow/pull/16678?quickstart=1)
+
+#### Install mlflow from this PR
+
+```
+# mlflow
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16678/merge
+# mlflow-skinny
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16678/merge#subdirectory=skinny
+```
+
+For Databricks, use the following command:
+
+```
+%sh curl -LsSf https://raw.githubusercontent.com/mlflow/mlflow/HEAD/dev/install-skinny.sh | sh -s pull/16678/merge
+```
+
+</p>
+</details>
+
+### Related Issues/PRs
+
+<!-- Uncomment 'Resolve' if this PR can close the linked items. -->
+<!-- Resolve --> #xxx
+
+### What changes are proposed in this pull request?
+datasets 4.0.0 causes several failure in toxicity metric, pin it to unblock tests
+
+<!-- Please fill in changes proposed in this PR. -->
+
+### How is this PR tested?
+
+- [ ] Existing unit/integration tests
+- [ ] New unit/integration tests
+- [ ] Manual tests
+
+<!-- Attach code, screenshot, video used for manual testing here. -->
+
+### Does this PR require documentation update?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. I've updated:
+  - [ ] Examples
+  - [ ] API references
+  - [ ] Instructions
+
+### Release Notes
+
+#### Is this a user-facing change?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. Give a description of this change to be included in the release notes for MLflow users.
+
+<!-- Details in 1-2 sentences. You can just refer to another PR with a description if this PR is part of a larger change. -->
+
+#### What component(s), interfaces, languages, and integrations does this PR affect?
+
+Components
+
+- [ ] `area/artifacts`: Artifact stores and artifact logging
+- [ ] `area/build`: Build and test infrastructure for MLflow
+- [ ] `area/deployments`: MLflow Deployments client APIs, server, and third-party Deployments integrations
+- [ ] `area/docs`: MLflow documentation pages
+- [ ] `area/evaluation`: MLflow model evaluation features, evaluation metrics, and evaluation workflows
+- [ ] `area/examples`: Example code
+- [ ] `area/model-registry`: Model Registry service, APIs, and the fluent client calls for Model Registry
+- [ ] `area/models`: MLmodel format, model serialization/deserialization, flavors
+- [ ] `area/projects`: MLproject format, project running backends
+- [ ] `area/prompt`: MLflow prompt engineering features, prompt templates, and prompt management
+- [ ] `area/scoring`: MLflow Model server, model deployment tools, Spark UDFs
+- [ ] `area/server-infra`: MLflow Tracking server backend
+- [ ] `area/tracing`: MLflow Tracing features, tracing APIs, and LLM tracing functionality
+- [ ] `area/tracking`: Tracking Service, tracking client APIs, autologging
+
+Interface
+
+- [ ] `area/uiux`: Front-end, user experience, plotting, JavaScript, JavaScript dev server
+- [ ] `area/docker`: Docker use across MLflow's components, such as MLflow Projects and MLflow Models
+- [ ] `area/sqlalchemy`: Use of SQLAlchemy in the Tracking Service or Model Registry
+- [ ] `area/windows`: Windows support
+
+Language
+
+- [ ] `language/r`: R APIs and clients
+- [ ] `language/java`: Java APIs and clients
+- [ ] `language/new`: Proposals for new client languages
+
+Integrations
+
+- [ ] `integrations/azure`: Azure and Azure ML integrations
+- [ ] `integrations/sagemaker`: SageMaker integrations
+- [ ] `integrations/databricks`: Databricks integrations
+
+<!--
+Insert an empty named anchor here to allow jumping to this section with a fragment URL
+(e.g. https://github.com/mlflow/mlflow/pull/123#user-content-release-note-category).
+Note that GitHub prefixes anchor names in markdown with ""user-content-"".
+-->
+
+<a name=""release-note-category""></a>
+
+#### How should the PR be classified in the release notes? Choose one:
+
+- [x] `rn/none` - No description will be included. The PR will be mentioned only by the PR number in the ""Small Bugfixes and Documentation Updates"" section
+- [ ] `rn/breaking-change` - The PR will be mentioned in the ""Breaking Changes"" section
+- [ ] `rn/feature` - A new user-facing feature worth mentioning in the release notes
+- [ ] `rn/bug-fix` - A user-facing bug fix worth mentioning in the release notes
+- [ ] `rn/documentation` - A user-facing documentation change worth mentioning in the release notes
+
+#### Should this PR be included in the next patch release?
+
+`Yes` should be selected for bug fixes, documentation updates, and other small changes. `No` should be selected for new features and larger changes. If you're unsure about the release classification of this PR, leave this unchecked to let the maintainers decide.
+
+<details>
+<summary>What is a minor/patch release?</summary>
+
+- Minor release: a release that increments the second part of the version number (e.g., 1.2.0 -> 1.3.0).
+  Bug fixes, doc updates and new features usually go into minor releases.
+- Patch release: a release that increments the third part of the version number (e.g., 1.2.0 -> 1.2.1).
+  Bug fixes and doc updates usually go into patch releases.
+
+</details>
+
+<!-- patch -->
+
+- [ ] Yes (this PR will be cherry-picked and included in the next patch release)
+- [x] No (this PR will be included in the next minor release)",dependency config fix,Version consistency,Version consistency,,
+https://github.com/mlflow/mlflow/pull/16719,Sync master branch into typescript-sdk,"<details><summary>&#x1F6E0 DevTools &#x1F6E0</summary>
+<p>
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/B-Step62/mlflow/pull/16719?quickstart=1)
+
+#### Install mlflow from this PR
+
+```
+# mlflow
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16719/merge
+# mlflow-skinny
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16719/merge#subdirectory=skinny
+```
+
+For Databricks, use the following command:
+
+```
+%sh curl -LsSf https://raw.githubusercontent.com/mlflow/mlflow/HEAD/dev/install-skinny.sh | sh -s pull/16719/merge
+```
+
+</p>
+</details>
+
+title",Platform migration,Conditional execution configuration,Platform migration,,
+https://github.com/mlflow/mlflow/pull/16789,Address minor issues in `dev/install-skinny.sh` script,"<details><summary>&#x1F6E0 DevTools &#x1F6E0</summary>
+<p>
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/harupy/mlflow/pull/16789?quickstart=1)
+
+#### Install mlflow from this PR
+
+```
+# mlflow
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16789/merge
+# mlflow-skinny
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16789/merge#subdirectory=libs/skinny
+```
+
+For Databricks, use the following command:
+
+```
+%sh curl -LsSf https://raw.githubusercontent.com/mlflow/mlflow/HEAD/dev/install-skinny.sh | sh -s pull/16789/merge
+```
+
+</p>
+</details>
+
+### Related Issues/PRs
+
+<!-- Uncomment 'Resolve' if this PR can close the linked items. -->
+<!-- Resolve --> #xxx
+
+### What changes are proposed in this pull request?
+
+<!-- Please fill in changes proposed in this PR. -->
+
+### How is this PR tested?
+
+- [ ] Existing unit/integration tests
+- [ ] New unit/integration tests
+- [ ] Manual tests
+
+<!-- Attach code, screenshot, video used for manual testing here. -->
+
+### Does this PR require documentation update?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. I've updated:
+  - [ ] Examples
+  - [ ] API references
+  - [ ] Instructions
+
+### Release Notes
+
+#### Is this a user-facing change?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. Give a description of this change to be included in the release notes for MLflow users.
+
+<!-- Details in 1-2 sentences. You can just refer to another PR with a description if this PR is part of a larger change. -->
+
+#### What component(s), interfaces, languages, and integrations does this PR affect?
+
+Components
+
+- [ ] `area/artifacts`: Artifact stores and artifact logging
+- [ ] `area/build`: Build and test infrastructure for MLflow
+- [ ] `area/deployments`: MLflow Deployments client APIs, server, and third-party Deployments integrations
+- [ ] `area/docs`: MLflow documentation pages
+- [ ] `area/evaluation`: MLflow model evaluation features, evaluation metrics, and evaluation workflows
+- [ ] `area/examples`: Example code
+- [ ] `area/model-registry`: Model Registry service, APIs, and the fluent client calls for Model Registry
+- [ ] `area/models`: MLmodel format, model serialization/deserialization, flavors
+- [ ] `area/projects`: MLproject format, project running backends
+- [ ] `area/prompt`: MLflow prompt engineering features, prompt templates, and prompt management
+- [ ] `area/scoring`: MLflow Model server, model deployment tools, Spark UDFs
+- [ ] `area/server-infra`: MLflow Tracking server backend
+- [ ] `area/tracing`: MLflow Tracing features, tracing APIs, and LLM tracing functionality
+- [ ] `area/tracking`: Tracking Service, tracking client APIs, autologging
+
+Interface
+
+- [ ] `area/uiux`: Front-end, user experience, plotting, JavaScript, JavaScript dev server
+- [ ] `area/docker`: Docker use across MLflow's components, such as MLflow Projects and MLflow Models
+- [ ] `area/sqlalchemy`: Use of SQLAlchemy in the Tracking Service or Model Registry
+- [ ] `area/windows`: Windows support
+
+Language
+
+- [ ] `language/r`: R APIs and clients
+- [ ] `language/java`: Java APIs and clients
+- [ ] `language/new`: Proposals for new client languages
+
+Integrations
+
+- [ ] `integrations/azure`: Azure and Azure ML integrations
+- [ ] `integrations/sagemaker`: SageMaker integrations
+- [ ] `integrations/databricks`: Databricks integrations
+
+<!--
+Insert an empty named anchor here to allow jumping to this section with a fragment URL
+(e.g. https://github.com/mlflow/mlflow/pull/123#user-content-release-note-category).
+Note that GitHub prefixes anchor names in markdown with ""user-content-"".
+-->
+
+<a name=""release-note-category""></a>
+
+#### How should the PR be classified in the release notes? Choose one:
+
+- [x] `rn/none` - No description will be included. The PR will be mentioned only by the PR number in the ""Small Bugfixes and Documentation Updates"" section
+- [ ] `rn/breaking-change` - The PR will be mentioned in the ""Breaking Changes"" section
+- [ ] `rn/feature` - A new user-facing feature worth mentioning in the release notes
+- [ ] `rn/bug-fix` - A user-facing bug fix worth mentioning in the release notes
+- [ ] `rn/documentation` - A user-facing documentation change worth mentioning in the release notes
+
+#### Should this PR be included in the next patch release?
+
+`Yes` should be selected for bug fixes, documentation updates, and other small changes. `No` should be selected for new features and larger changes. If you're unsure about the release classification of this PR, leave this unchecked to let the maintainers decide.
+
+<details>
+<summary>What is a minor/patch release?</summary>
+
+- Minor release: a release that increments the second part of the version number (e.g., 1.2.0 -> 1.3.0).
+  Bug fixes, doc updates and new features usually go into minor releases.
+- Patch release: a release that increments the third part of the version number (e.g., 1.2.0 -> 1.2.1).
+  Bug fixes and doc updates usually go into patch releases.
+
+</details>
+
+<!-- patch -->
+
+- [ ] Yes (this PR will be cherry-picked and included in the next patch release)
+- [x] No (this PR will be included in the next minor release)",test configuration,dependency config fix,test configuration,,
+https://github.com/mlflow/mlflow/pull/16810,test,"<details><summary>&#x1F6E0 DevTools &#x1F6E0</summary>
+<p>
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/harupy/mlflow/pull/16810?quickstart=1)
+
+#### Install mlflow from this PR
+
+```
+# mlflow
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16810/merge
+# mlflow-skinny
+pip install git+https://github.com/mlflow/mlflow.git@refs/pull/16810/merge#subdirectory=libs/skinny
+```
+
+For Databricks, use the following command:
+
+```
+%sh curl -LsSf https://raw.githubusercontent.com/mlflow/mlflow/HEAD/dev/install-skinny.sh | sh -s pull/16810/merge
+```
+
+</p>
+</details>
+
+### Related Issues/PRs
+
+<!-- Uncomment 'Resolve' if this PR can close the linked items. -->
+<!-- Resolve --> #xxx
+
+### What changes are proposed in this pull request?
+
+<!-- Please fill in changes proposed in this PR. -->
+
+### How is this PR tested?
+
+- [ ] Existing unit/integration tests
+- [ ] New unit/integration tests
+- [ ] Manual tests
+
+<!-- Attach code, screenshot, video used for manual testing here. -->
+
+### Does this PR require documentation update?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. I've updated:
+  - [ ] Examples
+  - [ ] API references
+  - [ ] Instructions
+
+### Release Notes
+
+#### Is this a user-facing change?
+
+- [ ] No. You can skip the rest of this section.
+- [ ] Yes. Give a description of this change to be included in the release notes for MLflow users.
+
+<!-- Details in 1-2 sentences. You can just refer to another PR with a description if this PR is part of a larger change. -->
+
+#### What component(s), interfaces, languages, and integrations does this PR affect?
+
+Components
+
+- [ ] `area/artifacts`: Artifact stores and artifact logging
+- [ ] `area/build`: Build and test infrastructure for MLflow
+- [ ] `area/deployments`: MLflow Deployments client APIs, server, and third-party Deployments integrations
+- [ ] `area/docs`: MLflow documentation pages
+- [ ] `area/evaluation`: MLflow model evaluation features, evaluation metrics, and evaluation workflows
+- [ ] `area/examples`: Example code
+- [ ] `area/model-registry`: Model Registry service, APIs, and the fluent client calls for Model Registry
+- [ ] `area/models`: MLmodel format, model serialization/deserialization, flavors
+- [ ] `area/projects`: MLproject format, project running backends
+- [ ] `area/prompt`: MLflow prompt engineering features, prompt templates, and prompt management
+- [ ] `area/scoring`: MLflow Model server, model deployment tools, Spark UDFs
+- [ ] `area/server-infra`: MLflow Tracking server backend
+- [ ] `area/tracing`: MLflow Tracing features, tracing APIs, and LLM tracing functionality
+- [ ] `area/tracking`: Tracking Service, tracking client APIs, autologging
+
+Interface
+
+- [ ] `area/uiux`: Front-end, user experience, plotting, JavaScript, JavaScript dev server
+- [ ] `area/docker`: Docker use across MLflow's components, such as MLflow Projects and MLflow Models
+- [ ] `area/sqlalchemy`: Use of SQLAlchemy in the Tracking Service or Model Registry
+- [ ] `area/windows`: Windows support
+
+Language
+
+- [ ] `language/r`: R APIs and clients
+- [ ] `language/java`: Java APIs and clients
+- [ ] `language/new`: Proposals for new client languages
+
+Integrations
+
+- [ ] `integrations/azure`: Azure and Azure ML integrations
+- [ ] `integrations/sagemaker`: SageMaker integrations
+- [ ] `integrations/databricks`: Databricks integrations
+
+<!--
+Insert an empty named anchor here to allow jumping to this section with a fragment URL
+(e.g. https://github.com/mlflow/mlflow/pull/123#user-content-release-note-category).
+Note that GitHub prefixes anchor names in markdown with ""user-content-"".
+-->
+
+<a name=""release-note-category""></a>
+
+#### How should the PR be classified in the release notes? Choose one:
+
+- [x] `rn/none` - No description will be included. The PR will be mentioned only by the PR number in the ""Small Bugfixes and Documentation Updates"" section
+- [ ] `rn/breaking-change` - The PR will be mentioned in the ""Breaking Changes"" section
+- [ ] `rn/feature` - A new user-facing feature worth mentioning in the release notes
+- [ ] `rn/bug-fix` - A user-facing bug fix worth mentioning in the release notes
+- [ ] `rn/documentation` - A user-facing documentation change worth mentioning in the release notes
+
+#### Should this PR be included in the next patch release?
+
+`Yes` should be selected for bug fixes, documentation updates, and other small changes. `No` should be selected for new features and larger changes. If you're unsure about the release classification of this PR, leave this unchecked to let the maintainers decide.
+
+<details>
+<summary>What is a minor/patch release?</summary>
+
+- Minor release: a release that increments the second part of the version number (e.g., 1.2.0 -> 1.3.0).
+  Bug fixes, doc updates and new features usually go into minor releases.
+- Patch release: a release that increments the third part of the version number (e.g., 1.2.0 -> 1.2.1).
+  Bug fixes and doc updates usually go into patch releases.
+
+</details>
+
+<!-- patch -->
+
+- [ ] Yes (this PR will be cherry-picked and included in the next patch release)
+- [x] No (this PR will be included in the next minor release)",test configuration,test code fix,test configuration,,
+https://github.com/novuhq/novu/pull/8389,chore(api-service): debug e2e latency,"### What changed? Why was the change needed?
+
+<!-- Also include any relevant links, such as Linear tickets, Slack discussions, or design documents. -->
+
+### Screenshots
+
+<!-- If the changes are visual, include screenshots or screencasts. -->
+
+<details>
+<summary><strong>Expand for optional sections</strong></summary>
+
+### Related enterprise PR
+
+<!-- A link to a dependent pull request  -->
+
+### Special notes for your reviewer
+
+<!-- Specific instructions or considerations you want to highlight for the reviewer. -->
+
+</details>",Platform migration,Action version update,Action version update,,
+https://github.com/nrwl/nx-console/pull/2534,chore(repo): add a claude github action via @claude,"inspired by angular-eslint and @JamesHenry, let's try working with claude",AI review integration,ai test integration,AI review integration,,
+https://github.com/nrwl/nx-console/pull/2594,chore(repo): increase CI timeout to one hour,"we've been adding more tests and stuff so if everything has to be retested, it might take longer",test configuration,build waste optimization,build waste optimization,,
+https://github.com/nrwl/nx/pull/31871,E2e master test,"<!-- Please make sure you have read the submission guidelines before posting an PR -->
+<!-- https://github.com/nrwl/nx/blob/master/CONTRIBUTING.md#-submitting-a-pr -->
+
+<!-- Please make sure that your commit message follows our format -->
+<!-- Example: `fix(nx): must begin with lowercase` -->
+
+<!-- If this is a particularly complex change or feature addition, you can request a dedicated Nx release for this pull request branch. Mention someone from the Nx team or the `@nrwl/nx-pipelines-reviewers` and they will confirm if the PR warrants its own release for testing purposes, and generate it for you if appropriate. -->
+
+## Current Behavior
+<!-- This is the behavior we have today -->
+
+## Expected Behavior
+<!-- This is the behavior we should expect with the changes in this PR -->
+
+## Related Issue(s)
+<!-- Please link the issue being fixed so it gets closed when this is merged. -->
+
+Fixes #",test configuration,redundant task removal,test configuration,,
+https://github.com/onyx-dot-app/onyx/pull/4003,enable manual testing for model server,"## Description
+
+Fixes DAN-1453.
+https://linear.app/danswer/issue/DAN-1453/model-tests-not-working
+
+## How Has This Been Tested?
+
+[Describe the tests you ran to verify your changes]
+
+## Backporting (check the box to trigger backport action)
+
+Note: You have to check that the action passes, otherwise resolve the conflicts manually and tag the patches.
+
+- [ ] This PR should be backported (make sure to check that the backport attempt succeeds)
+- [ ] [Optional] Override Linear Check",test configuration,Conditional execution configuration,Conditional execution configuration,,
+https://github.com/onyx-dot-app/onyx/pull/4030,test no-cache,"## Description
+
+[Provide a brief description of the changes in this PR]
+
+## How Has This Been Tested?
+
+[Describe the tests you ran to verify your changes]
+
+## Backporting (check the box to trigger backport action)
+
+Note: You have to check that the action passes, otherwise resolve the conflicts manually and tag the patches.
+
+- [ ] This PR should be backported (make sure to check that the backport attempt succeeds)
+- [ ] [Optional] Override Linear Check",cache config fix,test task addition,cache config fix,,
+https://github.com/onyx-dot-app/onyx/pull/4217,Fix model server build,"## Description
+
+[Provide a brief description of the changes in this PR]
+
+## How Has This Been Tested?
+
+[Describe the tests you ran to verify your changes]
+
+## Backporting (check the box to trigger backport action)
+
+Note: You have to check that the action passes, otherwise resolve the conflicts manually and tag the patches.
+
+- [ ] This PR should be backported (make sure to check that the backport attempt succeeds)
+- [ ] [Optional] Override Linear Check",Conditional execution configuration,redundant task removal,redundant task removal,Conditional execution configuration,"this is actually redundant tasks addition lol, it is more build waste"
+https://github.com/onyx-dot-app/onyx/pull/4681,run testing,"## Description
+
+Refs https://linear.app/danswer/issue/DAN-1956/update-helm-charts-to-separate-workers
+
+## How Has This Been Tested?
+
+[Describe the tests you ran to verify your changes]
+
+## Backporting (check the box to trigger backport action)
+
+Note: You have to check that the action passes, otherwise resolve the conflicts manually and tag the patches.
+
+- [ ] This PR should be backported (make sure to check that the backport attempt succeeds)
+- [ ] [Optional] Override Linear Check",Conditional execution configuration,test task addition,Conditional execution configuration,,
+https://github.com/openai/codex/pull/1230,fix: include codex-linux-sandbox-aarch64-unknown-linux-musl in the set of release artifacts,"This was missed in https://github.com/openai/codex/pull/1225. Once we create a new GitHub Release with this change, we can use the URL from the workflow that triggered the release in https://github.com/openai/codex/pull/1228.",artifact configuration,Build environment configuration,artifact configuration,,
+https://github.com/openai/openai-agents-js/pull/207,Enable the release CI job to cut a release tag on GitHub,"## Summary
+- tag releases after publishing
+
+## Testing
+- `pnpm build`
+- `CI=1 pnpm test`
+- `pnpm lint`
+
+
+------
+https://chatgpt.com/codex/tasks/task_i_6874639348b08320b55072d7ccd916b3",publish & release task addition,Version consistency,Version consistency,,
+https://github.com/openai/openai-agents-js/pull/254,ci(docs): automate docs translation,"## Summary
+
+This pull request adds a similar job to https://github.com/openai/openai-agents-python/blob/main/.github/workflows/update-docs.yml
+
+The Python project requires creating a pull request due to the main branch protection rules, but it's fine to push directly to the main branch for this project. Please find the script or command to run the translation, and create a GitHub Actions job that runs the translation only when files under the docs directory (except those under /ja/ and similar subdirectories) are changed.
+
+## Testing
+- `pnpm build`
+- `pnpm test`
+- `pnpm lint`
+
+------
+https://chatgpt.com/codex/tasks/task_i_68824d47f38c8320bee7471f4f5c5919",documentation addition,test task addition,documentation addition,,
+https://github.com/openai/openai-agents-python/pull/1162,Adjust #598 to only create a PR rather than pushing changes to main branch,"This pull request resolves the execution error of #598 CI job. The job pushes the changes directly to the main branch. However, our branch policies do not allow bypassing required checks, so it always fails. This pull request changes its behavior just to create a pull request and then ask humans to review (actually you don't need to check translation results though) and merge it.",Pull request governance,resources access restriction,Pull request governance,,
+https://github.com/openvm-org/openvm/pull/1788,chore: run verify-stark tests in ci,Runs the `verify-stark` integration test in CI,test task addition,Matrix Coverage Expansion,Matrix Coverage Expansion,,
+https://github.com/openvm-org/openvm/pull/1811,chore(ci): fix the instance type for codspeed benches,,runner configuration,Build environment configuration,runner configuration,,
+https://github.com/osori/korean-romanizer/pull/19,Add PyPI publishing workflow,"## Summary
+- trigger package publishing on push tags or release
+- document automatic release process in README
+
+## Testing
+- `pytest -q`
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_685fa5b6a8508333ab0857a66c2ecad6",publish & release task addition,Conditional execution configuration,Conditional execution configuration,,
+https://github.com/osori/korean-romanizer/pull/26,Fix release workflow trigger,"## Summary
+- update `python-publish` workflow to run only on releases
+- remove manual dispatch and maintainer check
+
+## Testing
+- `pytest -q`
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_685fbf9f69588333bbfc2caa16a80b4c",Conditional execution configuration,resources access restriction,Conditional execution configuration,,
+https://github.com/oven-sh/bun/pull/19763,Add ban-words lint workflow,"## Summary
+- rename ban-words test file to `ban-words.ci-lint.ts`
+- update instructions and package script
+- add GitHub Action `ban-words.yml` to run the new lint test and comment on PR failures
+
+## Testing
+- `bun agent test test/internal/ban-words.ci-lint.ts` *(fails: Configuring incomplete, errors occurred)*",lint task addition,Pull request governance,Pull request governance,,
+https://github.com/oven-sh/bun/pull/19812,ci: add update-zstd.yml,new action to auto-update zstd,dependency configuration,Version consistency,Version consistency,,
+https://github.com/oven-sh/bun/pull/19860,Add glob sources workflow,"## Summary
+- automate generation of cmake source file lists
+- run `bun scripts/glob-sources.mjs` automatically via workflow
+
+## Testing
+- `bun scripts/glob-sources.mjs`",build task addition,tool migration,build task addition,,
+https://github.com/oven-sh/bun/pull/20114,ci: pass the src directory to 'zig fmt',it does not interpret `**.zig` correctly,fix step input,syntax error,renaming,,
+https://github.com/oven-sh/bun/pull/20120,Windows codesigning for Bun's executable,"## Summary
+- codesign Windows builds in GitHub Actions
+
+## Testing
+- `pre-commit` *(fails: no command)*
+
+------
+https://chatgpt.com/codex/tasks/task_e_683bcee9d0548328ac46a353f2282ad2",artifact integrity validation,publish & release task addition,artifact configuration,,
+https://github.com/pdfme/pdfme/pull/765,Fix @typescript-eslint/eslint-plugin 8.25.0 Dependency Conflicts,"# Fix @typescript-eslint/eslint-plugin 8.25.0 Dependency Conflicts
+
+This PR updates the @typescript-eslint/parser package to match the version of @typescript-eslint/eslint-plugin.
+
+## Changes
+- Updated @typescript-eslint/parser from 5.62.0 to 8.25.0 to match @typescript-eslint/eslint-plugin 8.25.0
+
+## Why
+The @typescript-eslint packages should be updated together to maintain compatibility. The Dependabot PR #735 only updates @typescript-eslint/eslint-plugin to 8.25.0 but doesn't update @typescript-eslint/parser, which is likely causing the CI failure.
+
+This PR fixes the CI failures in Dependabot PR #735.
+
+Link to Devin run: https://app.devin.ai/sessions/40ecdced0aa848afac246decac5c926a
+Requested by: Kyohei",test task addition,Version consistency,test task addition,,
+https://github.com/pyth-network/pyth-crosschain/pull/2309,fix: add github token to protoc setup to fix rate limiting,"This PR adds the GitHub token to the protoc setup action to fix rate limiting issues in CI.
+
+Changes:
+- Added `repo-token: ${{ secrets.GITHUB_TOKEN }}` to protoc setup in ci-pre-commit.yml
+- Added `repo-token: ${{ secrets.GITHUB_TOKEN }}` to protoc setup in ci-hermes-server.yml
+
+This should resolve the API rate limit errors we've been seeing with the protoc setup action.
+
+Link to Devin run: https://app.devin.ai/sessions/063f0a95222f44f9851046a2ef47c12d",fix step input,test configuration,fix step input,,
+https://github.com/pyth-network/pyth-crosschain/pull/2338,fix: readd missing rust toolchain to fix CI,,Environment tooling update,dependency config fix,dependency config fix,,
+https://github.com/pyth-network/pyth-crosschain/pull/2348,refactor: move pythnet_sdk to sdks/pythnet_sdk/rust,"Move the pythnet_sdk directory to a more appropriate location under sdks/ while maintaining all functionality and dependencies.
+
+This PR:
+- Moves pythnet_sdk to sdks/pythnet_sdk/rust
+- Updates all path dependencies in target chain Cargo.toml files
+- Updates CI workflow directory
+- Updates Dockerfile paths
+
+No functional changes, only reorganizing the codebase structure.
+
+Link to Devin run: https://app.devin.ai/sessions/362c61a389df453aa3f42105a78c81fd
+Requested by: Jayant",Build environment configuration,renaming,renaming,,
+https://github.com/pyth-network/pyth-crosschain/pull/2352,ci: add docker builds for PRs that modify relevant files,"Add docker build steps to CI workflows for PRs that modify relevant files.
+
+Each workflow will now:
+- Build (but not publish) docker images on PRs that modify associated files
+- Keep existing publish behavior for main/tags
+- Use path filters to only trigger on relevant changes
+- Maintain consistent branch protection patterns
+
+All workflows have been updated:
+- price-pusher: apps/price_pusher/** and Dockerfile.node
+- hermes: apps/hermes/server/**
+- xc-admin-frontend: governance/xc_admin/**
+- fortuna: apps/fortuna/**
+
+Link to Devin run: https://app.devin.ai/sessions/3287e5a43b7b4046bd9ac6785d12cbc0
+Requested by: Jayant",build task addition,Conditional execution configuration,Conditional execution configuration,,
+https://github.com/pyth-network/pyth-crosschain/pull/2356,"Revert ""feat: add rust-cache to all Rust workflows""",Reverts pyth-network/pyth-crosschain#2355 -- this broke the near workflow for some reason? Not sure what the problem is but I'm going to roll it back in the meanwhile,cache config fix,caching implementation,caching implementation,,
+https://github.com/pyth-network/pyth-crosschain/pull/2384,chore: update foundry version to v0.3.0,"# Update Foundry version to v0.3.0
+
+This PR updates the Foundry version used in the Ethereum contract workflow from v0.2.0 to v0.3.0. Additionally, it ensures that the workflow runs when the workflow file itself is modified.
+
+Changes:
+- Update foundry-rs/foundry-toolchain from v1.1.1 to v0.3.0
+- Update Foundry version from v0.2.0 to v0.3.0
+- Add workflow file path to trigger paths to ensure workflow runs on workflow file changes
+
+Link to Devin run: https://app.devin.ai/sessions/39f40b364c48491e97e3bdaa65c94e3f
+Requested by: Jayant",Environment tooling update,Action version update,Action version update,,
+https://github.com/pyth-network/pyth-crosschain/pull/2406,chore: Update cache saving policy for github actions,"At the moment, pre-commit randomly takes the full 25 mins because it can't find the cache entry for the Rust build. I think what's happening is that we are evicting the `main` branch cache sometimes due to the Github cache size limit. (see inline comment for more details)",build waste optimization,Build environment configuration,conditional execution configuration,cache config fix,
+https://github.com/pyth-network/pyth-crosschain/pull/2460,chore: Pause pre-commit on branches,"## Summary
+
+The pre-commit cache expired and on re-download, it's causing some solana-net build error. Presumably solana semver is broken somewhere but I'm not sure. CI is also taking 30 mins right now which is going to block everyone.
+
+I'm disabling pre-commit on prs temporarily while I debug to unblock people. I will reenable and fix any problems after.",Conditional execution configuration,resources access restriction,conditional execution configuration,,
+https://github.com/pyth-network/pyth-crosschain/pull/2498,fix: fix installing libusb in github actions,"## Summary
+
+Installing node packages requires libusb & libudev due to some native extensions that get compiled during install.  However this started failing today, presumably due to package upgrades in the upstream repository.
+
+This PR fixes the libusb & libudev install to do an `apt-get update` before installing the packages.
+
+## Rationale
+
+CI is currently failing on tasks that require these libs.
+
+## How has this been tested?
+
+We'll see when the Github Actions trigger",package manager fix,dependency config fix,package manager fix,,
+https://github.com/pyth-network/pyth-crosschain/pull/2524,Only build stuff that requires Vercel env to build on Vercel,"## Summary
+
+Do not build packages that rely on the Vercel environment using `turbo build`, instead move them to build with `turbo build:vercel`
+
+## Rationale
+
+For many of our UI applications, in order to build the package, a number of environment variables must be present.
+
+The values for these env vars are stored in Vercel, however not everyone who contributes to this repository will have access to Vercel.
+
+This PR modifies the turbo config to not build those packages on `turbo build`. This is generally probably the right thing since we don't want those packages to build in Github Actions either, given the environment is not going to be present in GHA and so the builds would likely fail there too.
+
+After this PR, to build any packages that rely on Vercel environments, you will run `turbo build:vercel`.  Running `turbo build` will build everything else and will exclude anything that depends on the Vercel env.
+
+## How has this been tested?
+
+CI will be the test",Build environment configuration,publish & release task addition,Environment tooling update,,
+https://github.com/pyth-network/pyth-crosschain/pull/2600,fix(lazer-publisher-sdk): Fix script not found,"## Summary
+
+Workflow couldn't find the script. I am pretty sure I just need to add ""./""
+
+## Rationale
+
+Workflow fails
+
+## How has this been tested?
+
+- [ ] Current tests cover my changes
+- [ ] Added new tests
+- [ ] Manually tested the code
+
+N/A",fix step input,syntax error,syntax error,,
+https://github.com/pyth-network/pyth-crosschain/pull/2715,fix: remove profile: minimal from CI workflows,"# Fix CI issues by removing `profile: minimal` from workflow files
+
+## Description
+This PR fixes the flaky CI issues by removing the `profile: minimal` parameter from all GitHub workflow files. As mentioned in the Slack thread, this parameter was causing toolchain components to not be installed properly, leading to failures in CI but not in PR builds.
+
+## Changes
+- Removed `profile: minimal` from all workflow files that were using it:
+  - `ci-solana-contract.yml`
+  - `ci-pythnet-sdk.yml`
+  - `ci-message-buffer.yml`
+  - `ci-remote-executor.yml`
+  - `ci-starknet-tools.yml`
+  - `ci-fortuna.yml`
+  - `ci-hermes-server.yml`
+  - `ci-cosmwasm-contract.yml`
+  - `ci-sui-contract.yml`
+  - `publish-pyth-price-store.yml`
+  - `publish-pyth-solana-receiver-state.yml`
+
+## Testing
+- Changes are to CI configuration only, no code changes required
+
+## Link to Devin run
+https://app.devin.ai/sessions/887dc3badd4d4f388f3d969bdba09ae0
+
+Requested by: Jayant Krishnamurthy (jayant@dourolabs.xyz)",dependency config fix,fix step input,fix step input,,
+https://github.com/pyth-network/pyth-crosschain/pull/2850,chore(ci): fix starknet build,"## Summary
+
+Pin Rust version for building starknet-devnet because it somehow fails to build on newer Rust.
+
+## Rationale
+
+Fix CI
+
+## How has this been tested?
+
+- [x] Current tests cover my changes
+- [ ] Added new tests
+- [ ] Manually tested the code
+
+<!-- Describe the steps you've taken to verify the changes -->",Environment tooling update,Version consistency,package manager fix,,
+https://github.com/raycast/extensions/pull/19292,Add Claude PR Assistant workflow,"## Description
+
+<!-- A summary of your change. If you add a new extension or command, explain what it does. -->
+
+## Screencast
+
+<!-- If you add a new extension or command, include a screencast (or screenshot for straightforward changes). A good screencast will make the review much faster - especially if your extension requires registration in other services.  -->
+
+## Checklist
+
+- [ ] I read the [extension guidelines](https://developers.raycast.com/basics/prepare-an-extension-for-store)
+- [ ] I read the [documentation about publishing](https://developers.raycast.com/basics/publish-an-extension)
+- [ ] I ran `npm run build` and [tested this distribution build in Raycast](https://developers.raycast.com/basics/prepare-an-extension-for-store#metadata-and-configuration)
+- [ ] I checked that files in the `assets` folder are used by the extension itself
+- [ ] I checked that assets used in the `README` are located outside the metadata folder if they were not generated with our [metadata tool](https://developers.raycast.com/basics/prepare-an-extension-for-store#how-to-use-it)",AI review integration,ai test integration,AI review integration,,
+https://github.com/reflex-dev/reflex-web/pull/1306,Fix: Replace --no-interactive with --interactive=false in deploy workflows,"## Description
+
+Fixes the failing GitHub action for deploying to Reflex Cloud by replacing the invalid `--no-interactive` flag with `--interactive=false`.
+
+## Testing
+
+N/A - This is a GitHub workflow fix.
+
+## Link to Devin run
+https://app.devin.ai/sessions/1263d485dd6c4785b0089b44679dbc2c
+
+Requested by: Alek Petuskey (alek@reflex.dev)",fix step input,syntax error,Environment tooling update,,
+https://github.com/reflex-dev/reflex-web/pull/1308,Revert the last two deploy workflow commits,"# Revert the last two deploy workflow commits
+
+This PR reverts the following two commits:
+1. a92a8a4 - ""Fix: Remove interactive flag from deploy workflows (#1307)""
+2. c6ab559 - ""Fix: Replace --no-interactive with --interactive=false in deploy workflows (#1306)""
+
+## Changes
+- Reverts changes to deploy workflow files
+- Restores previous command line flag format
+
+## Testing
+- Verified whitelist.py is empty as required by CI
+
+Link to Devin run: https://app.devin.ai/sessions/04769953caee43dbbc2c584b20e51b2b
+Requested by: Alek Petuskey (alek@reflex.dev)",fix step input,syntax error,Environment tooling update,,
+https://github.com/reflex-dev/reflex-web/pull/1486,ENG-6652: Add dead link checker to dev deployment workflow,"# Add dead link checker to dev deployment workflow
+
+## Summary
+
+This PR adds a comprehensive dead link checker to the dev deployment GitHub Actions workflow. After successful deployment to https://pcweb-gray-orca.rxc.app, the workflow now runs a Python script that crawls the deployed site to check for broken links, failing the deployment if dead links are found.
+
+**Key Changes:**
+- **New dead link checker script** (`scripts/check_dead_links.py`) that crawls the deployed site systematically
+- **Dependencies file** (`scripts/requirements.txt`) with required packages (requests, beautifulsoup4, lxml)  
+- **Workflow integration** in `.github/workflows/deploy-dev.yml` to run the checker after deployment
+- **False positive handling** for known problematic links (Google Fonts preconnect, Twitter bot detection)
+
+The script uses a breadth-first crawling approach, checks both internal and external links, and provides detailed error reporting with source page information.
+
+## Review & Testing Checklist for Human
+
+**🔴 HIGH RISK - 5 items to verify:**
+
+- [ ] **Test the script manually** against the deployed site to verify it works correctly and doesn't produce false positives: `python scripts/check_dead_links.py https://pcweb-gray-orca.rxc.app --max-pages 50`
+- [ ] **Verify workflow timing** - ensure the 30-second wait after deployment is sufficient for the site to be fully ready (may need adjustment)
+- [ ] **Check CI integration** - monitor the next deployment to verify the dead link checker runs successfully in the GitHub Actions environment
+- [ ] **Test failure behavior** - temporarily introduce a dead link to confirm the workflow fails as expected and provides useful error messages
+- [ ] **Review crawler parameters** - validate that 200 pages, 15s timeout, and 1s delay are appropriate for CI environment (may cause timeouts or rate limiting)
+
+**Recommended test plan:**
+1. Run the script locally with various parameters to test edge cases
+2. Deploy to dev and monitor the workflow execution
+3. Introduce a test dead link and verify failure detection
+4. Check that legitimate external links (documentation, GitHub, etc.) don't cause false positives
+
+---
+
+### Diagram
+
+```mermaid
+%%{ init : { ""theme"" : ""default"" }}%%
+graph TB
+    Deploy[""Deploy to Reflex<br/>(existing)""]:::context
+    Workflow["".github/workflows/<br/>deploy-dev.yml""]:::major-edit
+    Script[""scripts/<br/>check_dead_links.py""]:::major-edit
+    Reqs[""scripts/<br/>requirements.txt""]:::major-edit
+    Site[""https://pcweb-gray-orca.rxc.app<br/>(deployed site)""]:::context
+    
+    Deploy -->|""triggers after success""| Workflow
+    Workflow -->|""installs deps from""| Reqs
+    Workflow -->|""executes""| Script
+    Script -->|""crawls and checks links""| Site
+    Script -->|""fails workflow if dead links found""| Workflow
+    
+    subgraph Legend
+        L1[""Major Edit""]:::major-edit
+        L2[""Minor Edit""]:::minor-edit  
+        L3[""Context/No Edit""]:::context
+    end
+    
+    
+    classDef major-edit fill:#90EE90
+    classDef minor-edit fill:#87CEEB
+    classDef context fill:#FFFFFF
+```
+
+### Notes
+
+- The script was tested locally and successfully detected dead links, but **has not been tested in the CI environment**
+- False positive handling is implemented for Google Fonts and Twitter, but other edge cases may exist
+- The script will **fail deployments** if dead links are found - this is intentional but high-impact
+- Consider monitoring the first few runs closely to tune parameters and identify any issues
+
+**Link to Devin run:** https://app.devin.ai/sessions/d86b9807a6e644bc957ab245fe7ff13a  
+**Requested by:** @Alek99",test task addition,lint task addition,lint task addition,,
+https://github.com/reflex-dev/reflex-web/pull/1516,update deploy yamls,,fix step input,dependency configuration,Environment tooling update,,
+https://github.com/roeniss/dhlottery-api/pull/146,Switch to setuptools_scm for versioning,"## Summary
+- manage package version via `setuptools_scm`
+- write generated version to `src/dhapi/_version.py`
+- document new release flow
+- update workflow to stop using VERSION file
+- add regression test for version generation
+
+## Testing
+- `make lintfmt`
+- `make check`
+- `make test`
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_688085a80c6483329cc0426a2f465c74",dependency configuration,redundant task removal,dependency configuration,,
+https://github.com/roeniss/dhlottery-api/pull/147,Update publish workflow trigger and docs,"## Summary
+- trigger publish workflow on push instead of manual dispatch
+- compute tag from `setuptools_scm` in workflow
+- document automated release process
+- add regression test for workflow trigger
+- require `pyyaml` for tests
+
+## Testing
+- `make lintfmt`
+- `make check`
+- `pip install -r requirements.txt`
+- `make test`
+
+------
+https://chatgpt.com/codex/tasks/task_e_688085be5cbc8332beb8f42645b87617",Conditional execution configuration,Version consistency,Conditional execution configuration,,
+https://github.com/roeniss/dhlottery-api/pull/149,Add Release Drafter workflow,"## Summary
+- set up Release Drafter workflow and config to auto-generate release notes
+- document new automatic draft release step
+- add validation tests for the new config
+- include PyYAML for test parsing
+
+## Testing
+- `make lintfmt`
+- `make check`
+- `make test`
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_6880811d38dc8332bf47c7a7dccdfcba",Release notes enrichment,publish & release task addition,Release notes enrichment,,
+https://github.com/sandrohanea/whisper.net/pull/400,Build artifacts fix for native libraries,,fix step input,artifact configuration,artifact configuration,,
+https://github.com/sandrohanea/whisper.net/pull/406,Fix artifact workflow submodule checkout,"## Summary
+- ensure `whisper.cpp` submodule is checked out in the artifact upload workflow
+
+## Testing
+- `dotnet test Whisper.net.sln` *(fails: required native runtime files not found)*
+
+------
+https://chatgpt.com/codex/tasks/task_e_68513a50ebdc83238dc2200aa5c9c3e7",fix step input,artifact configuration,artifact configuration,,
+https://github.com/saturday06/VRM-Addon-for-Blender/pull/814,chore: split job,,task decomposition,syntax error,task decomposition,,
+https://github.com/selfxyz/self/pull/632,Fix yarn publish token,"## Summary
+- fix workflow for npm publishing by adding the token env var Yarn expects
+
+## Testing
+- `yarn lint`
+
+
+------
+https://chatgpt.com/codex/tasks/task_b_68506b120d7c8330bedc69de4d7a6352",package manager fix,Build environment configuration,Build environment configuration,,
+https://github.com/selfxyz/self/pull/645,audit fixes,"<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+## Summary by CodeRabbit
+
+- **New Features**
+  - Improved error handling with a clear message when a verification configuration is not set or recognized.
+  - Extended the data range for OFAC-related attributes in EU ID card verifications to enhance accuracy.
+
+- **Tests**
+  - Added tests to verify that the system correctly fails when an invalid or unset configuration ID is used during verification.
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",Environment tooling update,tool migration,artifact configuration,,
+https://github.com/selfxyz/self/pull/756,Cursor/cursorignore,"Prevents Cursor AI from accessing sensitive files (keys, credentials,
+deployment configs) and large generated artifacts that slow down indexing.
+Keeps source code accessible while excluding build outputs, node_modules,
+and circuit/contract compilation artifacts across the monorepo.
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+* **New Features**
+  * Added multiple new zero-knowledge proof circuit configurations for identity and registration, supporting a variety of cryptographic schemes.
+  * Introduced a script to batch-compile Circom circuits into R1CS and WASM formats.
+  * Added comprehensive documentation for contract deployment and upgrade procedures.
+
+* **Improvements**
+  * Enhanced build scripts to support new circuit categories and improved concurrency handling.
+  * Refactored deployment and update scripts for better modularity, error handling, and logging.
+  * Standardized and simplified environment variable and contract address management.
+
+* **Bug Fixes**
+  * Disabled deployment of a specific verifier contract to prevent unintended deployments.
+
+* **Chores**
+  * Added configuration files to control editor and build tool behaviors, improving project maintainability.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",build task addition,resources access restriction,artifact configuration,,
+https://github.com/stack-auth/stack-auth/pull/664,Fix docker,"<!--
+
+Make sure you've read the CONTRIBUTING.md guidelines: https://github.com/stack-auth/stack-auth/blob/dev/CONTRIBUTING.md
+
+-->
+
+<!-- ELLIPSIS_HIDDEN -->
+
+----
+
+> [!IMPORTANT]
+> Enable Docker build by removing fail step and switch from `bcrypt` to `bcryptjs` for password hashing.
+> 
+>   - **Docker Workflow**:
+>     - Removed temporary fail step in `.github/workflows/docker-server-build.yaml` to enable Docker build process.
+>   - **Dependencies**:
+>     - Replaced `bcrypt` with `bcryptjs` in `package.json` and `hashes.tsx` for password hashing.
+>     - Updated `@types/bcrypt` to `@types/bcryptjs` in `package.json`.
+>   - **Documentation**:
+>     - Added `docker/README.md` with instructions for building and running Docker containers for server and emulator.
+> 
+> <sup>This description was created by </sup>[<img alt=""Ellipsis"" src=""https://img.shields.io/badge/Ellipsis-blue?color=175173"">](https://www.ellipsis.dev?ref=stack-auth%2Fstack-auth&utm_source=github&utm_medium=referral)<sup> for c7a3ed9f11e3986831e478919c1e851a4a61b4fe. You can [customize](https://app.ellipsis.dev/stack-auth/settings/summaries) this summary. It will automatically update as commits are pushed.</sup>
+
+<!-- ELLIPSIS_HIDDEN -->",redundant task removal,resources access restriction,redundant task removal,,
+https://github.com/sugyan/claude-code-webui/pull/80,Implement automated demo recording CI/CD pipeline (closes #68),"## Type of Change
+
+- [ ] 🐛 `bug` - Bug fix (non-breaking change which fixes an issue)
+- [x] ✨ `feature` - New feature (non-breaking change which adds functionality)
+- [ ] 💥 `breaking` - Breaking change
+- [ ] 📚 `documentation` - Documentation update
+- [ ] ⚡ `performance` - Performance improvement
+- [ ] 🔨 `refactor` - Code refactoring
+- [ ] 🧪 `test` - Adding or updating tests
+- [ ] 🔧 `chore` - Maintenance, dependencies, tooling
+
+## Summary
+
+Implements clean, focused demo recording and comparison system for CI/CD pipeline to automatically detect when README videos may need updating after releases.
+
+**Closes #68**
+
+## Key Features
+
+✅ **Simple Release Integration**: Demo videos (`codeGeneration-dark`) automatically generated and included in releases  
+✅ **Post-Release Comparison**: Automated comparison between README videos and new release videos  
+✅ **Smart Notifications**: GitHub Issues created only when significant differences detected  
+✅ **Manual Override**: Human judgment for actual README updates (no risky auto-updates)  
+✅ **Clean Architecture**: Focused, maintainable code without over-engineering  
+
+## Implementation
+
+### Enhanced Release Process (`release.yml`)
+- Generates demo videos during release builds
+- Uses simple `npm run record:demo codeGeneration -- --theme=both`
+- Includes videos as release assets automatically
+
+### Video Comparison (`compare-demo-videos.ts`) 
+- **Simplified from 620→213 lines (70% reduction)**
+- Focused on core 2-file comparison using frame-by-frame analysis
+- Removed complex GitHub API integration and download logic
+- Clear help documentation and proper exit codes
+
+### Post-Release Monitoring (`demo-comparison.yml`)
+- Triggered automatically on release publication or manual dispatch
+- Uses simple shell commands (`grep`, `curl`, `gh release download`)
+- Compares single video: `codeGeneration-dark-*.webm` only
+- Creates labeled GitHub Issues when differences detected
+
+## Workflow
+
+1. **Release**: Videos generated and uploaded to release assets
+2. **Auto-comparison**: `demo-comparison.yml` runs post-release
+3. **Detection**: Frame-by-frame comparison with 95% similarity threshold
+4. **Notification**: GitHub Issue created if significant changes found
+5. **Human review**: Manual decision on whether to update README
+
+## Benefits
+
+- **Maintainable**: Simple, focused code that does exactly what's needed
+- **Reliable**: No risky automatic README modifications
+- **Efficient**: Only runs when needed (post-release)
+- **Transparent**: Clear notifications via GitHub Issues
+- **Flexible**: Manual override and threshold configuration
+
+## Test Plan
+
+- [x] Scripts execute correctly with proper error handling
+- [x] TypeScript compilation succeeds  
+- [x] ESLint passes (warnings only from existing code)
+- [x] Help commands work correctly
+- [x] GitHub workflows validate syntactically
+- [x] Core comparison logic tested
+- [ ] End-to-end testing with actual release (requires release trigger)
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>",publish & release task addition,test task addition,publish & release task addition,,
+https://github.com/tegnike/aituber-kit/pull/402,Add Claude Code GitHub Workflow,"## 🤖 Installing Claude Code GitHub App
+
+This PR adds a GitHub Actions workflow that enables Claude Code integration in our repository.
+
+### What is Claude Code?
+
+[Claude Code](https://claude.ai/code) is an AI coding agent that can help with:
+- Bug fixes and improvements  
+- Documentation updates
+- Implementing new features
+- Code reviews and suggestions
+- Writing tests
+- And more!
+
+### How it works
+
+Once this PR is merged, we'll be able to interact with Claude by mentioning @claude in a pull request or issue comment.
+Once the workflow is triggered, Claude will analyze the comment and surrounding context, and execute on the request in a GitHub action.
+
+### Important Notes
+
+- **This workflow won't take effect until this PR is merged**
+- **@claude mentions won't work until after the merge is complete**
+- The workflow runs automatically whenever Claude is mentioned in PR or issue comments
+- Claude gets access to the entire PR or issue context including files, diffs, and previous comments
+
+### Security
+
+- Our Anthropic API key is securely stored as a GitHub Actions secret
+- Only users with write access to the repository can trigger the workflow
+- All Claude runs are stored in the GitHub Actions run history
+- Claude's default tools are limited to reading/writing files and interacting with our repo by creating comments, branches, and commits.
+- We can add more allowed tools by adding them to the workflow file like:
+
+```
+allowed_tools: Bash(npm install),Bash(npm run build),Bash(npm run lint),Bash(npm run test)
+```
+
+There's more information in the [Claude Code documentation](http://docs.anthropic.com/s/claude-code-github-actions).
+
+After merging this PR, let's try mentioning @claude in a comment on any PR to get started!
+
+<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **新機能**
+  - 「@claude」とコメントやタイトルに記載された場合に自動で実行されるGitHub Actionsワークフローを追加しました。
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",AI review integration,AI repository governance,AI review integration,AI repository governance,
+https://github.com/temporalio/temporal/pull/7836,Try ARM,"## What changed?
+_Describe what has changed in this PR._
+
+## Why?
+_Tell your future self why have you made these changes._
+
+## How did you test it?
+- [ ] built
+- [ ] run locally and tested manually
+- [ ] covered by existing tests
+- [ ] added new unit test(s)
+- [ ] added new functional test(s)
+
+## Potential risks
+_Any change is risky. Identify all risks you are aware of. If none, remove this section._",runner configuration,Build environment configuration,runner configuration,,
+https://github.com/temporalio/temporal/pull/7837,Bump test shards to 4,"## What changed?
+
+Bump test sharding from 3 to 4.
+
+## Why?
+
+Hot fix to prevent Cassandra tests from terminating ([example](https://github.com/temporalio/temporal/actions/runs/14385910499/job/40341362855)).
+
+There are certainly other options to tackle this, but this seems like a quick fix to try before those.",Matrix Coverage Expansion,test configuration,test configuration,,
+https://github.com/theopenco/llmgateway/pull/128,fix(ci): update repository tag format in images.yml,Updated Docker image tag format to use github.repository for consistency and accuracy in CI workflows.,fix step input,renaming,renaming,,
+https://github.com/theopenco/llmgateway/pull/262,ci(workflows): exclude Dependabot from e2e workflow,Added a condition to skip e2e tests for Dependabot commits.,Conditional execution configuration,resources access restriction,Conditional execution configuration,,
+https://github.com/theopenco/llmgateway/pull/337,feat: add CloudRift provider with DeepSeek-V3 model support,"# Add CloudRift Provider with DeepSeek-V3 Model Support
+
+## Summary
+This PR adds CloudRift as a new provider to the LLM Gateway system, implementing the DeepSeek-V3 model with full integration across the codebase.
+
+## Changes Made
+- **Provider Definition**: Added CloudRift provider to `packages/models/src/providers.ts` with streaming and cancellation support
+- **Model Configuration**: Implemented DeepSeek-V3 model in `packages/models/src/models.ts` with CloudRift provider mapping
+- **Environment Variables**: Added `CLOUD_RIFT_API_KEY` handling in `apps/gateway/src/chat/chat.ts`
+- **API Configuration**: Configured CloudRift endpoint (`https://inference.cloudrift.ai/v1`) in `packages/models/src/provider-api.ts`
+- **Test Integration**: Updated test utilities in `apps/gateway/src/test-utils/test-helpers.ts`
+- **CI Configuration**: Added CloudRift API key to GitHub Actions workflow in `.github/workflows/run.yml`
+
+## Technical Details
+- **Endpoint**: `https://inference.cloudrift.ai/v1` (OpenAI-compatible)
+- **Authentication**: Uses `CLOUD_RIFT_API_KEY` environment variable
+- **Model**: `deepseek/deepseek-ai/DeepSeek-V3`
+- **Pricing**: $2/1M input tokens, $8/1M output tokens (estimated)
+- **Context Size**: 200,000 tokens
+- **Features**: JSON output support, streaming, cancellation
+
+## Testing
+- ✅ Unit tests pass (`pnpm test:unit`)
+- ⚠️ E2E tests fail due to missing valid `CLOUD_RIFT_API_KEY` in test environment (expected for new provider)
+- ✅ Code formatting and linting pass (`pnpm format`)
+
+## Implementation Notes
+CloudRift follows the OpenAI-compatible API pattern, so it leverages existing request/response handlers for seamless integration. The provider is configured similarly to other OpenAI-compatible providers like Together.ai and Kluster.ai.
+
+## Link to Devin run
+https://app.devin.ai/sessions/a96a10000f324765a75183ba937f6ccf
+
+## Requested by
+Luca (contact@luca-steeb.com)",test configuration,Build environment configuration,Build environment configuration,,
+https://github.com/theopenco/llmgateway/pull/494,ci(e2e): add cancellation by branch name,Add branch-based cancellation to e2e.yml workflow to cancel pending runs on the same branch.,build waste optimization,Conditional execution configuration,build waste optimization,,
+https://github.com/theosanderson/taxonium/pull/701,Add Claude Code GitHub Workflow,"## 🤖 Installing Claude Code GitHub App
+
+This PR adds a GitHub Actions workflow that enables Claude Code integration in our repository.
+
+### What is Claude Code?
+
+[Claude Code](https://claude.ai/code) is an AI coding agent that can help with:
+- Bug fixes and improvements  
+- Documentation updates
+- Implementing new features
+- Code reviews and suggestions
+- Writing tests
+- And more!
+
+### How it works
+
+Once this PR is merged, we'll be able to interact with Claude by mentioning @claude in a pull request or issue comment.
+Once the workflow is triggered, Claude will analyze the comment and surrounding context, and execute on the request in a GitHub action.
+
+### Important Notes
+
+- **This workflow won't take effect until this PR is merged**
+- **@claude mentions won't work until after the merge is complete**
+- The workflow runs automatically whenever Claude is mentioned in PR or issue comments
+- Claude gets access to the entire PR or issue context including files, diffs, and previous comments
+
+### Security
+
+- Our Anthropic API key is securely stored as a GitHub Actions secret
+- Only users with write access to the repository can trigger the workflow
+- All Claude runs are stored in the GitHub Actions run history
+- Claude's default tools are limited to reading/writing files and interacting with our repo by creating comments, branches, and commits.
+- We can add more allowed tools by adding them to the workflow file like:
+
+```
+allowed_tools: Bash(npm install),Bash(npm run build),Bash(npm run lint),Bash(npm run test)
+```
+
+There's more information in the [Claude Code documentation](http://docs.anthropic.com/s/claude-code-github-actions).
+
+After merging this PR, let's try mentioning @claude in a comment on any PR to get started!",AI review integration,AI repository governance,AI review integration,,
+https://github.com/theosanderson/taxonium/pull/721,Fix Snapcraft build error,"## Summary
+- fix linux build by installing Snapcraft before building Electron
+
+## Testing
+- `git status --short`
+
+
+------
+https://chatgpt.com/codex/tasks/task_e_686689f0a5c4832599b1b54342fe4950",Environment tooling update,dependency configuration,dependency configuration,,
+https://github.com/toeverything/AFFiNE/pull/9386,fix(server): selfhost startup,,fix step input,syntax error,syntax error,,
+https://github.com/toeverything/AFFiNE/pull/9574,ci: fix android release pipeline,,package manager fix,test configuration,fix step input,,
+https://github.com/trycompai/comp/pull/130,Auto translate english,"<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
+
+## Summary by CodeRabbit
+
+- **New Features**
+	- Introduced an automated process that seamlessly updates translation files when the source text is modified, ensuring localization updates are consistent and reducing manual effort.
+
+<!-- end of auto-generated comment: release notes by coderabbit.ai -->",build task addition,documentation addition,documentation addition,,
+https://github.com/trycompai/comp/pull/351,fix: update database migration workflow for Prisma,"- Adjusted directory path for Prisma migration commands to improve organization.
+- Removed unnecessary database seed step from the workflow for cleaner execution.
+
+## What does this PR do?
+
+<!-- Please include a summary of the change and which issue is fixed. Please also include relevant motivation and context. List any dependencies that are required for this change. -->
+
+- Fixes #XXXX (GitHub issue number)
+- Fixes COMP-XXXX (Linear issue number - should be visible at the bottom of the GitHub issue description)
+
+## Visual Demo (For contributors especially)
+
+A visual demonstration is strongly recommended, for both the original and new change **(video / image - any one)**.
+
+#### Video Demo (if applicable):
+
+- Show screen recordings of the issue or feature.
+- Demonstrate how to reproduce the issue, the behavior before and after the change.
+
+#### Image Demo (if applicable):
+
+- Add side-by-side screenshots of the original and updated change.
+- Highlight any significant change(s).
+
+## Mandatory Tasks (DO NOT REMOVE)
+
+- [ ] I have self-reviewed the code (A decent size PR without self-review might be rejected).
+- [ ] I have updated the developer docs in /docs if this PR makes changes that would require a [documentation change](https://trycomp.ai/docs). If N/A, write N/A here and check the checkbox.
+- [ ] I confirm automated tests are in place that prove my fix is effective or that my feature works.
+
+## How should this be tested?
+
+<!-- Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce. Please also list any relevant details for your test configuration. Write details that help to start the tests -->
+
+- Are there environment variables that should be set?
+- What are the minimal test data to have?
+- What is expected (happy path) to have (input and output)?
+- Any other important info that could help to test that PR
+
+## Checklist
+
+<!-- Remove bullet points below that don't apply to you -->
+
+- I haven't read the [contributing guide](https://github.com/trycomp/comp/blob/main/CONTRIBUTING.md)
+- My code doesn't follow the style guidelines of this project
+- I haven't commented my code, particularly in hard-to-understand areas
+- I haven't checked if my changes generate no new warnings",redundant task removal,Build environment configuration,Build environment configuration,,
+https://github.com/trycompai/comp/pull/352,fix: update database migration workflow for Prisma schema path,"- Adjusted the directory path for Prisma migration commands to specify the schema location explicitly.
+- Improved organization of the migration workflow for better clarity and maintainability.
+
+## What does this PR do?
+
+<!-- Please include a summary of the change and which issue is fixed. Please also include relevant motivation and context. List any dependencies that are required for this change. -->
+
+- Fixes #XXXX (GitHub issue number)
+- Fixes COMP-XXXX (Linear issue number - should be visible at the bottom of the GitHub issue description)
+
+## Visual Demo (For contributors especially)
+
+A visual demonstration is strongly recommended, for both the original and new change **(video / image - any one)**.
+
+#### Video Demo (if applicable):
+
+- Show screen recordings of the issue or feature.
+- Demonstrate how to reproduce the issue, the behavior before and after the change.
+
+#### Image Demo (if applicable):
+
+- Add side-by-side screenshots of the original and updated change.
+- Highlight any significant change(s).
+
+## Mandatory Tasks (DO NOT REMOVE)
+
+- [ ] I have self-reviewed the code (A decent size PR without self-review might be rejected).
+- [ ] I have updated the developer docs in /docs if this PR makes changes that would require a [documentation change](https://trycomp.ai/docs). If N/A, write N/A here and check the checkbox.
+- [ ] I confirm automated tests are in place that prove my fix is effective or that my feature works.
+
+## How should this be tested?
+
+<!-- Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce. Please also list any relevant details for your test configuration. Write details that help to start the tests -->
+
+- Are there environment variables that should be set?
+- What are the minimal test data to have?
+- What is expected (happy path) to have (input and output)?
+- Any other important info that could help to test that PR
+
+## Checklist
+
+<!-- Remove bullet points below that don't apply to you -->
+
+- I haven't read the [contributing guide](https://github.com/trycomp/comp/blob/main/CONTRIBUTING.md)
+- My code doesn't follow the style guidelines of this project
+- I haven't commented my code, particularly in hard-to-understand areas
+- I haven't checked if my changes generate no new warnings",fix step input,syntax error,syntax error,,
+https://github.com/trycompai/comp/pull/405,Mariano/fix migrations,"## What does this PR do?
+
+<!-- Please include a summary of the change and which issue is fixed. Please also include relevant motivation and context. List any dependencies that are required for this change. -->
+
+- Fixes #XXXX (GitHub issue number)
+- Fixes COMP-XXXX (Linear issue number - should be visible at the bottom of the GitHub issue description)
+
+## Visual Demo (For contributors especially)
+
+A visual demonstration is strongly recommended, for both the original and new change **(video / image - any one)**.
+
+#### Video Demo (if applicable):
+
+- Show screen recordings of the issue or feature.
+- Demonstrate how to reproduce the issue, the behavior before and after the change.
+
+#### Image Demo (if applicable):
+
+- Add side-by-side screenshots of the original and updated change.
+- Highlight any significant change(s).
+
+## Mandatory Tasks (DO NOT REMOVE)
+
+- [ ] I have self-reviewed the code (A decent size PR without self-review might be rejected).
+- [ ] I have updated the developer docs in /docs if this PR makes changes that would require a [documentation change](https://trycomp.ai/docs). If N/A, write N/A here and check the checkbox.
+- [ ] I confirm automated tests are in place that prove my fix is effective or that my feature works.
+
+## How should this be tested?
+
+<!-- Please describe the tests that you ran to verify your changes. Provide instructions so we can reproduce. Please also list any relevant details for your test configuration. Write details that help to start the tests -->
+
+- Are there environment variables that should be set?
+- What are the minimal test data to have?
+- What is expected (happy path) to have (input and output)?
+- Any other important info that could help to test that PR
+
+## Checklist
+
+<!-- Remove bullet points below that don't apply to you -->
+
+- I haven't read the [contributing guide](https://github.com/trycomp/comp/blob/main/CONTRIBUTING.md)
+- My code doesn't follow the style guidelines of this project
+- I haven't commented my code, particularly in hard-to-understand areas
+- I haven't checked if my changes generate no new warnings",fix step input,Build environment configuration,fix step input,,
+https://github.com/vectordotdev/vector/pull/23278,fix(ci): Use source changes in integration.yml,"## Summary
+<!-- Please provide a brief summary about what this PR does.
+This should help the reviewers give feedback faster and with higher quality. -->
+Use source changes in integration.yml. Without this dependencies is never set
+
+
+## Vector configuration
+<!-- Include Vector configuration(s) you used to test and debug your changes. -->
+
+## How did you test this PR?
+<!-- Please describe how you tested your changes. Also include any information about your setup. -->
+
+## Change Type
+- [x] Bug fix
+- [ ] New feature
+- [ ] Non-functional (chore, refactoring, docs)
+- [ ] Performance
+
+## Is this a breaking change?
+- [ ] Yes
+- [x] No
+
+## Does this PR include user facing changes?
+
+- [ ] Yes. Please add a changelog fragment based on our [guidelines](https://github.com/vectordotdev/vector/blob/master/changelog.d/README.md).
+- [x] No. A maintainer will apply the `no-changelog` label to this PR.
+
+## References
+
+<!--
+- Closes: #<issue number>
+- Related: #<issue number>
+- Related: #<PR number>
+-->
+
+## Notes
+- Please read our [Vector contributor resources](https://github.com/vectordotdev/vector/tree/master/docs#getting-started).
+- Do not hesitate to use `@vectordotdev/vector` to reach out to us regarding this PR.
+- Some CI checks run only after we manually approve them.
+  - We recommend adding a `pre-push` hook, please see [this template](https://github.com/vectordotdev/vector/blob/master/CONTRIBUTING.md#Pre-push).
+  - Alternatively, we recommend running the following locally before pushing to the remote branch:
+    - `cargo fmt --all`
+    - `cargo clippy --workspace --all-targets -- -D warnings`
+    - `cargo nextest run --workspace` (alternatively, you can run `cargo test --all`)
+- After a review is requested, please avoid force pushes to help us review incrementally.
+  - Feel free to push as many commits as you want. They will be squashed into one before merging.
+  - For example, you can run `git merge origin master` and `git push`.
+- If this PR introduces changes Vector dependencies (modifies `Cargo.lock`), please
+  run `cargo vdev build licenses` to regenerate the [license inventory](https://github.com/vectordotdev/vrl/blob/main/LICENSE-3rdparty.csv) and commit the changes (if any). More details [here](https://crates.io/crates/dd-rust-license-tool).
+
+
+<!--
+  Your PR title must conform to the conventional commit spec:
+  https://www.conventionalcommits.org/en/v1.0.0/
+
+  <type>(<scope>)!: <description>
+
+  * `type` = chore, enhancement, feat, fix, docs, revert
+  * `!` = OPTIONAL: signals a breaking change
+  * `scope` = Optional when `type` is ""chore"" or ""docs"", available scopes https://github.com/vectordotdev/vector/blob/master/.github/workflows/semantic.yml#L31
+  * `description` = short description of the change
+
+Examples:
+
+  * enhancement(file source): Add `sort` option to sort discovered files
+  * feat(new source): Initial `statsd` source
+  * fix(file source): Fix a bug discovering new files
+  * chore(external docs): Clarify `batch_size` option
+-->",fix step input,test configuration,fix step input,,
+https://github.com/vectordotdev/vector/pull/23281,fix(ci): require changes to run before downloading artifacts,"## Summary
+<!-- Please provide a brief summary about what this PR does.
+This should help the reviewers give feedback faster and with higher quality. -->
+Require changes to run before downloading artifacts. Without this the integration.yml job would fail on a workflow_dispatch
+
+## Vector configuration
+<!-- Include Vector configuration(s) you used to test and debug your changes. -->
+NA
+
+## How did you test this PR?
+<!-- Please describe how you tested your changes. Also include any information about your setup. -->
+NA
+## Change Type
+- [x] Bug fix
+- [ ] New feature
+- [ ] Non-functional (chore, refactoring, docs)
+- [ ] Performance
+
+## Is this a breaking change?
+- [ ] Yes
+- [x] No
+
+## Does this PR include user facing changes?
+
+- [ ] Yes. Please add a changelog fragment based on our [guidelines](https://github.com/vectordotdev/vector/blob/master/changelog.d/README.md).
+- [x] No. A maintainer will apply the `no-changelog` label to this PR.
+
+## References
+
+<!--
+- Closes: #<issue number>
+- Related: #<issue number>
+- Related: #<PR number>
+-->
+
+## Notes
+- Please read our [Vector contributor resources](https://github.com/vectordotdev/vector/tree/master/docs#getting-started).
+- Do not hesitate to use `@vectordotdev/vector` to reach out to us regarding this PR.
+- Some CI checks run only after we manually approve them.
+  - We recommend adding a `pre-push` hook, please see [this template](https://github.com/vectordotdev/vector/blob/master/CONTRIBUTING.md#Pre-push).
+  - Alternatively, we recommend running the following locally before pushing to the remote branch:
+    - `cargo fmt --all`
+    - `cargo clippy --workspace --all-targets -- -D warnings`
+    - `cargo nextest run --workspace` (alternatively, you can run `cargo test --all`)
+- After a review is requested, please avoid force pushes to help us review incrementally.
+  - Feel free to push as many commits as you want. They will be squashed into one before merging.
+  - For example, you can run `git merge origin master` and `git push`.
+- If this PR introduces changes Vector dependencies (modifies `Cargo.lock`), please
+  run `cargo vdev build licenses` to regenerate the [license inventory](https://github.com/vectordotdev/vrl/blob/main/LICENSE-3rdparty.csv) and commit the changes (if any). More details [here](https://crates.io/crates/dd-rust-license-tool).
+
+
+<!--
+  Your PR title must conform to the conventional commit spec:
+  https://www.conventionalcommits.org/en/v1.0.0/
+
+  <type>(<scope>)!: <description>
+
+  * `type` = chore, enhancement, feat, fix, docs, revert
+  * `!` = OPTIONAL: signals a breaking change
+  * `scope` = Optional when `type` is ""chore"" or ""docs"", available scopes https://github.com/vectordotdev/vector/blob/master/.github/workflows/semantic.yml#L31
+  * `description` = short description of the change
+
+Examples:
+
+  * enhancement(file source): Add `sort` option to sort discovered files
+  * feat(new source): Initial `statsd` source
+  * fix(file source): Fix a bug discovering new files
+  * chore(external docs): Clarify `batch_size` option
+-->",Conditional execution configuration,Dependencies expansion,Conditional execution configuration,,
+https://github.com/vectordotdev/vector/pull/23283,fix(ci): require changes to run before downloading artifacts,"## Summary
+<!-- Please provide a brief summary about what this PR does.
+This should help the reviewers give feedback faster and with higher quality. -->
+Require changes to run before downloading artifacts. Without this the integration.yml job would fail on a workflow_dispatch
+
+## Vector configuration
+<!-- Include Vector configuration(s) you used to test and debug your changes. -->
+NA
+
+## How did you test this PR?
+<!-- Please describe how you tested your changes. Also include any information about your setup. -->
+After merge I ran the job manually. [Run](https://github.com/vectordotdev/vector/actions/runs/15928157647)
+
+## Change Type
+- [x] Bug fix
+- [ ] New feature
+- [ ] Non-functional (chore, refactoring, docs)
+- [ ] Performance
+
+## Is this a breaking change?
+- [ ] Yes
+- [x] No
+
+## Does this PR include user facing changes?
+
+- [ ] Yes. Please add a changelog fragment based on our [guidelines](https://github.com/vectordotdev/vector/blob/master/changelog.d/README.md).
+- [x] No. A maintainer will apply the `no-changelog` label to this PR.
+
+## References
+
+- Related: #23281 
+<!--
+- Closes: #<issue number>
+- Related: #<issue number>
+-->
+
+## Notes
+- Please read our [Vector contributor resources](https://github.com/vectordotdev/vector/tree/master/docs#getting-started).
+- Do not hesitate to use `@vectordotdev/vector` to reach out to us regarding this PR.
+- Some CI checks run only after we manually approve them.
+  - We recommend adding a `pre-push` hook, please see [this template](https://github.com/vectordotdev/vector/blob/master/CONTRIBUTING.md#Pre-push).
+  - Alternatively, we recommend running the following locally before pushing to the remote branch:
+    - `cargo fmt --all`
+    - `cargo clippy --workspace --all-targets -- -D warnings`
+    - `cargo nextest run --workspace` (alternatively, you can run `cargo test --all`)
+- After a review is requested, please avoid force pushes to help us review incrementally.
+  - Feel free to push as many commits as you want. They will be squashed into one before merging.
+  - For example, you can run `git merge origin master` and `git push`.
+- If this PR introduces changes Vector dependencies (modifies `Cargo.lock`), please
+  run `cargo vdev build licenses` to regenerate the [license inventory](https://github.com/vectordotdev/vrl/blob/main/LICENSE-3rdparty.csv) and commit the changes (if any). More details [here](https://crates.io/crates/dd-rust-license-tool).
+
+
+<!--
+  Your PR title must conform to the conventional commit spec:
+  https://www.conventionalcommits.org/en/v1.0.0/
+
+  <type>(<scope>)!: <description>
+
+  * `type` = chore, enhancement, feat, fix, docs, revert
+  * `!` = OPTIONAL: signals a breaking change
+  * `scope` = Optional when `type` is ""chore"" or ""docs"", available scopes https://github.com/vectordotdev/vector/blob/master/.github/workflows/semantic.yml#L31
+  * `description` = short description of the change
+
+Examples:
+
+  * enhancement(file source): Add `sort` option to sort discovered files
+  * feat(new source): Initial `statsd` source
+  * fix(file source): Fix a bug discovering new files
+  * chore(external docs): Clarify `batch_size` option
+-->",Conditional execution configuration,fix step input,Conditional execution configuration,,
+https://github.com/vectordotdev/vector/pull/23295,feat(ci): add ability to specify checkout ref in msrv.yml,"## Summary
+<!-- Please provide a brief summary about what this PR does.
+This should help the reviewers give feedback faster and with higher quality. -->
+Add ability to specify checkout ref in msrv.yml
+
+## Vector configuration
+<!-- Include Vector configuration(s) you used to test and debug your changes. -->
+NA
+
+## How did you test this PR?
+<!-- Please describe how you tested your changes. Also include any information about your setup. -->
+NA
+
+## Change Type
+- [ ] Bug fix
+- [x] New feature
+- [x] Non-functional (chore, refactoring, docs)
+- [ ] Performance
+
+## Is this a breaking change?
+- [ ] Yes
+- [x] No
+
+## Does this PR include user facing changes?
+
+- [ ] Yes. Please add a changelog fragment based on our [guidelines](https://github.com/vectordotdev/vector/blob/master/changelog.d/README.md).
+- [x] No. A maintainer will apply the `no-changelog` label to this PR.
+
+## References
+
+<!--
+- Closes: #<issue number>
+- Related: #<issue number>
+- Related: #<PR number>
+-->
+
+## Notes
+- Please read our [Vector contributor resources](https://github.com/vectordotdev/vector/tree/master/docs#getting-started).
+- Do not hesitate to use `@vectordotdev/vector` to reach out to us regarding this PR.
+- Some CI checks run only after we manually approve them.
+  - We recommend adding a `pre-push` hook, please see [this template](https://github.com/vectordotdev/vector/blob/master/CONTRIBUTING.md#Pre-push).
+  - Alternatively, we recommend running the following locally before pushing to the remote branch:
+    - `cargo fmt --all`
+    - `cargo clippy --workspace --all-targets -- -D warnings`
+    - `cargo nextest run --workspace` (alternatively, you can run `cargo test --all`)
+- After a review is requested, please avoid force pushes to help us review incrementally.
+  - Feel free to push as many commits as you want. They will be squashed into one before merging.
+  - For example, you can run `git merge origin master` and `git push`.
+- If this PR introduces changes Vector dependencies (modifies `Cargo.lock`), please
+  run `cargo vdev build licenses` to regenerate the [license inventory](https://github.com/vectordotdev/vrl/blob/main/LICENSE-3rdparty.csv) and commit the changes (if any). More details [here](https://crates.io/crates/dd-rust-license-tool).
+
+
+<!--
+  Your PR title must conform to the conventional commit spec:
+  https://www.conventionalcommits.org/en/v1.0.0/
+
+  <type>(<scope>)!: <description>
+
+  * `type` = chore, enhancement, feat, fix, docs, revert
+  * `!` = OPTIONAL: signals a breaking change
+  * `scope` = Optional when `type` is ""chore"" or ""docs"", available scopes https://github.com/vectordotdev/vector/blob/master/.github/workflows/semantic.yml#L31
+  * `description` = short description of the change
+
+Examples:
+
+  * enhancement(file source): Add `sort` option to sort discovered files
+  * feat(new source): Initial `statsd` source
+  * fix(file source): Fix a bug discovering new files
+  * chore(external docs): Clarify `batch_size` option
+-->",Build environment configuration,Conditional execution configuration,Build environment configuration,,
+https://github.com/vlm-run/vlmrun-hub/pull/45,Minor improvements to hub catalog schema,"- made version optional
+ - added supported_inputs to metadata
+ - add literals to supported_inputs
+ - add SchemaCatalogMetadata model
+ - add model_validator to validate supported_inputs and domain",action migration,caching implementation,action migration,,
+https://github.com/vlm-run/vlmrun-hub/pull/50,fix: bump version ci,,redundant task removal,Version consistency,redundant task removal,,
+https://github.com/waldzellai/waldzell-mcp/pull/56,Simplify repo organization,"## Summary
+- remove Turbo monorepo config
+- adjust tooling to look in `servers/`
+- simplify root package.json
+- update tsconfig and ESLint config
+- streamline GitHub workflow and README
+
+## Testing
+- `npm test --workspaces` *(fails: vitest not found)*
+
+------
+https://chatgpt.com/codex/tasks/task_e_6855872a2a748325b5437d5474b6bc22",Conditional execution configuration,renaming,renaming,,
+https://github.com/waldzellai/waldzell-mcp/pull/61,Fix CI install step,"## Summary
+- run `yarn install --immutable` in CI/CD workflows so node_modules are generated
+
+## Testing
+- `yarn build` *(fails: package doesn't seem to be present in lockfile)*
+- `yarn test` *(fails: package doesn't seem to be present in lockfile)*
+
+------
+https://chatgpt.com/codex/tasks/task_e_6855da265ac8832592ebc7bfbd7da199",package manager fix,dependency configuration,package manager fix,,
+https://github.com/whitphx/stlite/pull/1324,Fix CI concurrency branch name,,Conditional execution configuration,syntax error,Conditional execution configuration,,
+https://github.com/whitphx/stlite/pull/1351,Split inform- and set-package-stats,,task decomposition,action migration,task decomposition,,
+https://github.com/whitphx/stlite/pull/1365,Fix the hash attached to the artifact files,,artifact configuration,syntax error,renaming,,
+https://github.com/whitphx/stlite/pull/1422,Use deployment-url instead of pages-deployment-alias-url,,fix step input,syntax error,renaming,,
+https://github.com/whitphx/stlite/pull/1464,Run yarn install in publish jobs,Rel: #1463,package manager fix,Dependencies expansion,dependency configuration,,
+https://github.com/wolfSSL/wolfssh/pull/774,Add FATFS build test workflow,"Add GitHub Action to verify WOLFSSH_FATFS builds successfully.
+
+- Add workflow to test FATFS build configuration
+- Include patch for WRENAME macro fix
+- Test with SFTP enabled since FATFS is used with SFTP
+
+Link to Devin run: https://app.devin.ai/sessions/f85a5f4e93eb42a58d89bc4832c18e03
+Requested by: lealem@wolfssl.com",build task addition,test task addition,test task addition,,
+https://github.com/wolfSSL/wolfssh/pull/778,Add GitHub Actions workflow for g++ and clang compilation,"This PR adds a GitHub Actions workflow to test compilation using g++ and clang compilers.
+
+- Tests compilation with gcc versions 9-12
+- Tests compilation with clang versions 10-14
+- Uses ubuntu-latest for all jobs
+- Follows same pattern as wolfSSL's multi-compiler.yml
+
+Link to Devin run: https://app.devin.ai/sessions/ba369f2814354098a9ad07160875a337
+Requested by: andrew@wolfssl.com",build task addition,test task addition,build task addition,,
+https://github.com/wolfSSL/wolfssh/pull/800,Make Keyboard Interactive a compile time option,"Now an off-by-default compile-time option. This saves resources and confusion if you are not expecting it.
+
+ZD #19704",Build environment configuration,Matrix Coverage Expansion,Matrix Coverage Expansion,Build environment configuration,"this is about allowing an option to use keyboard interactively in compilation, I don't think it is matrix coverage expansion"
+https://github.com/wvlet/wvlet/pull/1012,fix: Fetch all tags in Python publish workflow for versioning,"## Summary
+
+This PR fixes the Python package versioning issue that was causing PyPI uploads to fail with ""file already exists"" error.
+
+## Problem
+
+The Python publish workflow was building packages with version 2025.1.0 instead of the current release version (2025.1.8) because setuptools_scm couldn't access the git tags.
+
+## Solution
+
+Add `fetch-depth: 0` to the checkout actions to ensure all git tags are fetched. This allows setuptools_scm to correctly determine the version from the latest git tag.
+
+## Impact
+
+- Python packages will now be built with the correct version matching the git release tag
+- PyPI uploads will succeed without ""file already exists"" errors
+- Each release will have its own unique version on PyPI
+
+🤖 Generated with [Claude Code](https://claude.ai/code)",fix step input,Version consistency,fix step input,,
+https://github.com/wvlet/wvlet/pull/1013,fix: Add skip-existing to PyPI publish to handle partial uploads,"## Summary
+
+This PR fixes the PyPI publish error by adding `skip-existing: true` to handle cases where some files have already been uploaded.
+
+## Problem
+
+The Python publish workflow was failing with ""File already exists"" error for `wvlet-2025.1.9-py3-none-manylinux2014_x86_64.whl`, even though some files were successfully uploaded.
+
+## Solution
+
+Add `skip-existing: true` to the PyPI publish action. This allows the workflow to:
+- Skip files that have already been uploaded
+- Continue uploading remaining files
+- Complete successfully without errors
+
+## Impact
+
+- Future releases will handle partial uploads gracefully
+- No need to manually intervene when some files are already on PyPI
+- The workflow will be more robust and reliable
+
+🤖 Generated with [Claude Code](https://claude.ai/code)",fix step input,Version consistency,fix step input,,
+https://github.com/yamadashy/repomix/pull/605,Add Claude Code GitHub Workflow,yamadashy,AI review integration,AI repository governance,AI review integration,,

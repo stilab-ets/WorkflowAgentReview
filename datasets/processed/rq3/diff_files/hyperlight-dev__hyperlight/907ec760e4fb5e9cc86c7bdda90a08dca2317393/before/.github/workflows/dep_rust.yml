@@ -1,0 +1,157 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Rust Tests and Lints
+
+# See README.md in this directory for more information about workflow_call
+on:
+  workflow_call:
+    inputs:
+      docs_only:
+        description: Skip building if docs only
+        required: false
+        type: string
+        default: "false"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: full
+
+permissions:
+  id-token: write
+  contents: read
+
+# The reason for default shell bash is because on our self-hosted windows runners,
+# the default shell is powershell, which doesn't work correctly together with `just` commands.
+# Even if a command inside a just-recipe fails, github reports the step as successful.
+# The problem may or may not be related to our custom windows runner not applying the
+# powershell steps outlined here 
+# https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#exit-codes-and-error-action-preference
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    if: ${{ inputs.docs_only == 'false' }}
+    strategy:
+      fail-fast: true
+      matrix:
+        hypervisor: [hyperv, 'hyperv-ws2025', mshv, mshv3, kvm] # hyperv is windows, mshv and kvm are linux
+        cpu: [amd, intel]
+        config: [debug, release]
+
+    runs-on: ${{ fromJson(
+        format('["self-hosted", "{0}", "X64", "1ES.Pool=hld-{1}-{2}"]', 
+          (matrix.hypervisor == 'hyperv' || matrix.hypervisor == 'hyperv-ws2025') && 'Windows' || 'Linux', 
+          matrix.hypervisor == 'hyperv' && 'win2022' || matrix.hypervisor == 'hyperv-ws2025' && 'win2025' || matrix.hypervisor == 'mshv3' && 'azlinux3-mshv' || matrix.hypervisor, 
+          matrix.cpu)) }} 
+    steps:
+      - uses: actions/checkout@v4
+
+      # For rust-fmt 
+      - name: Set up nightly rust 
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+
+      - uses: hyperlight-dev/ci-setup-workflow@v1.4.0
+        with:
+          rust-toolchain: "1.85" 
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: fmt
+        run: just fmt-check
+
+      - name: clippy
+        run: |
+          just clippy ${{ matrix.config }}
+          just clippy-guests ${{ matrix.config }}
+
+      # Does not check for updated Cargo.lock files for test rust guests as this causes an issue with this checkwhen deoendabot updates dependencies in common crates
+      - name: Ensure up-to-date Cargo.lock
+        run: |
+          cargo fetch --locked
+
+      - name: Get gh action service name
+        if: ${{ (runner.os == 'Windows' )}}
+        run: (Get-Service actions.runner.*) | Foreach { $_.Name, $_.UserName, $_.ServiceType }
+        shell: pwsh
+
+      - name: Build and move Rust guests
+        run: |
+          # use these commands in favor of build-and-move-rust-guests to avoid building both configs
+          just build-rust-guests ${{ matrix.config }}
+          just move-rust-guests ${{ matrix.config }}
+
+      - name: Build c guests
+        run: |
+          # use these commands in favor of build-and-move-c-guests to avoid building both configs
+          just build-c-guests ${{ matrix.config }}
+          just move-c-guests ${{ matrix.config }}
+      - name: Build
+        run: just build ${{ matrix.config }}
+
+      - name: Verify MSRV
+        run: ./dev/verify-msrv.sh hyperlight-host hyperlight-guest hyperlight-guest-bin hyperlight-common
+
+      - name: Run Rust tests
+        env:
+          CARGO_TERM_COLOR: always
+        run: |
+          # with default features
+          just test ${{ matrix.config }} ${{ matrix.hypervisor == 'mshv3' && 'mshv3' || ''}}
+
+          # with only one driver enabled (driver mshv/kvm feature is ignored on windows) + seccomp 
+          just test ${{ matrix.config }} seccomp,${{ matrix.hypervisor == 'mshv' && 'mshv2' || matrix.hypervisor == 'mshv3' && 'mshv3' || 'kvm' }} 
+
+          # make sure certain cargo features compile
+          cargo check -p hyperlight-host --features crashdump
+          cargo check -p hyperlight-host --features print_debug
+          cargo check -p hyperlight-host --features gdb
+
+          # without any driver (shouldn't compile)
+          just test-compilation-fail ${{ matrix.config }}
+
+        # One of the examples is flaky on Windows GH runners, so this allows us to disable it for now
+      - name: Run Rust examples - windows
+        if: ${{ (runner.os == 'Windows') }}
+        env:
+          CARGO_TERM_COLOR: always
+          RUST_LOG: debug
+        run: just run-rust-examples ${{ matrix.config }}
+
+      - name: Run Rust examples - linux
+        if: ${{ (runner.os != 'Windows') }}
+        env:
+          CARGO_TERM_COLOR: always
+          RUST_LOG: debug
+        run: just run-rust-examples-linux ${{ matrix.config }} ${{ matrix.hypervisor == 'mshv3' && 'mshv3' || ''}}
+
+      - name: Run Rust Gdb tests - linux
+        if: runner.os == 'Linux'
+        env:
+          CARGO_TERM_COLOR: always
+          RUST_LOG: debug
+        run: just test-rust-gdb-debugging ${{ matrix.config }} ${{ matrix.hypervisor == 'mshv3' && 'mshv3' || ''}}
+
+      ### Benchmarks ###
+      - name: Install github-cli (Linux mariner)
+        if: runner.os == 'Linux' && matrix.hypervisor == 'mshv'
+        run: sudo dnf install gh -y
+
+      - name: Install github-cli (Linux ubuntu)
+        if: runner.os == 'Linux' && matrix.hypervisor == 'kvm'
+        run: sudo apt install gh -y
+
+      - name: Download benchmarks from "latest"
+        run: just bench-download ${{ runner.os }} ${{ matrix.hypervisor }} ${{ matrix.cpu}} dev-latest # compare to prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        if: ${{ matrix.config == 'release' }}
+
+      - name: Run benchmarks
+        run: |
+          just bench-ci main ${{ matrix.config }} ${{ matrix.hypervisor == 'mshv3' && 'mshv3' || ''}}
+        if: ${{ matrix.config == 'release' }}

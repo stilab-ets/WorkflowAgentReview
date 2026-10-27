@@ -1,0 +1,119 @@
+name: E2E Tests
+
+on:
+  pull_request:
+    branches:
+      - "*"
+    paths-ignore:
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/docs-release.yml"
+      - ".github/workflows/outdated.yml"
+      - ".github/workflows/comment-tag-report.yml"
+      - ".github/workflows/pr-agent.yml"
+      - ".github/workflows/build-binary.yml"
+      - ".github/CODEOWNERS"
+      - "config/**"
+      - "README.md"
+      - "LICENSE"
+      - "CONTRIBUTING.md"
+      - "utils/slack-notifiers/**"
+  workflow_dispatch:
+  push: # Rebuild cache policy
+    branches:
+      - "main"
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+
+jobs:
+  e2e-automine-stratus-rocks:
+    name: E2E Automine Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-stratus"
+      justfile_args: "automine"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-automine-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-external-stratus-rocks:
+    name: E2E External Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-stratus"
+      justfile_args: "external"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-external-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-interval-stratus:
+    name: E2E Interval Stratus
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-stratus"
+      justfile_args: "10ms"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-interval-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-clock-stratus-rocks:
+    name: E2E Clock Stratus Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-clock-stratus"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-clock-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-admin-password:
+    name: E2E Admin Password
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-admin-password"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-admin-password-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-rpc-downloader:
+    name: E2E RPC Downloader
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-rpc-downloader"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-rpc-downloader-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-importer-offline:
+    name: E2E Importer Offline
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-importer-offline"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-importer-offline-${{ github.ref || github.run_id }}
+      cancel-in-progress: true
+
+  e2e-genesis-rocks:
+    name: E2E Genesis Rocks
+    uses: ./.github/workflows/_setup-e2e.yml
+    with:
+      justfile_recipe: "e2e-genesis"
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    concurrency:
+      group: ${{ github.workflow }}-genesis-rocks-${{ github.ref || github.run_id }}
+      cancel-in-progress: true

@@ -1,0 +1,48 @@
+name: Test Fuel Contract
+
+on:
+  pull_request:
+    paths:
+      - target_chains/fuel/**
+  push:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: target_chains/fuel/contracts/
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "target_chains/fuel/contracts -> target"
+      - name: Install Fuel toolchain
+        run: |
+          curl https://install.fuel.network | sh
+          echo "$HOME/.fuelup/bin" >> $GITHUB_PATH
+      - name: Build with Forc
+        run: forc build --verbose
+      - name: Run tests with Forc
+        run: forc test --verbose
+        if: success() || failure()
+      - name: Rust add wasm32-unknown-unknown target
+        run: rustup target add wasm32-unknown-unknown
+        if: success() || failure()
+      - name: Format check
+        run: cargo fmt --manifest-path ./target_chains/fuel/contracts/Cargo.toml --all -- --check
+        if: success() || failure()
+      - name: Clippy check
+        run: cargo clippy --manifest-path ./target_chains/fuel/contracts/Cargo.toml --tests -- --deny warnings
+        if: success() || failure()
+      - name: Build
+        run: cargo build --verbose
+        if: success() || failure()
+      - name: Run tests
+        run: cargo test --verbose
+        if: success() || failure()

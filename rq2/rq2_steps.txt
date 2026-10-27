@@ -1,0 +1,13 @@
+1. Read the final RQ1 metrics from `datasets/processed/combined_metrics.csv` and retain only agent-authored pull requests.
+
+2. Stratify the pull requests by agent: OpenAI Codex (115), Devin (110), Cursor (25), Claude Code (8), and Copilot (6).
+
+3. Use the same 13 continuous review-effort metrics and acceptance outcome defined for RQ1.
+
+4. Use descriptive analysis rather than inferential tests because the agent groups are highly imbalanced and some contain very few pull requests.
+
+5. Calculate the median of each continuous metric for every agent and calculate the acceptance rate as the proportion of merged pull requests.
+
+6. Compare the metric distributions and median values across the five agents.
+
+7. Save the agent summary table and generate the cross-agent comparison figure.

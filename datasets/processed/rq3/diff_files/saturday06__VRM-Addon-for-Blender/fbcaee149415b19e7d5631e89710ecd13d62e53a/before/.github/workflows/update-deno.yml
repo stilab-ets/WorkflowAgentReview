@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: MIT OR GPL-3.0-or-later
+#
+# renovateのPRがマージされたら、deno関連のアップデートのPR作成や更新を行う。
+#
+# 本来なら自動で定期的にdeno関連のアップデートを行いたい。しかし、完全に
+# 自動にしてしまうと、Actionsが有効かつ管理されていないフォークレポジトリで
+# ジョブが動き続け、GitHubのフォークとブランチのNetwork表示のノイズになる。
+# そのため、自動で定期的に動くハードルを高めに設定する必要がある。
+# renovateのPRマージのタイミングなら適度なハードルなので、これをトリガーにしている。
+
+name: update-deno-dependencies
+
+permissions: {}
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  update-deno-dependencies:
+    if: startsWith(github.head_ref, 'renovate/') && github.event.pull_request.merged
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Switch to working branch
+        run: git checkout -b update-deno-dependencies
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: vx.x.x
+      - name: Update .dvmrc
+        run: deno eval 'console.log(Deno.version.deno)' | tee .dvmrc
+      - name: Update deno.jsonc and deno.lock
+        run: deno outdated --latest --update
+      - name: Push
+        run: |
+          set -x
+
+          git add .
+          if git diff --cached --exit-code; then
+            exit 0
+          fi
+          git config --global user.email 'isamu@leafytree.jp'
+          git config --global user.name '[BOT] Isamu Mogi'
+          git commit -m 'chore: update dependencies [BOT]'
+          if git diff --exit-code origin/update-deno-dependencies; then
+            exit 0
+          fi
+          git push -f origin update-deno-dependencies
+
+          gh pr create --base main --fill || true
+          gh pr merge --merge --auto
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

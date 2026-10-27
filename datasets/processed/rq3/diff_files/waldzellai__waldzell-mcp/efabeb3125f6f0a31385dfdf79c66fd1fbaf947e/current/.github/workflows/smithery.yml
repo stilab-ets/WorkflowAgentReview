@@ -1,0 +1,82 @@
+name: Deploy to Smithery
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'servers/*/smithery.yaml'
+      - 'servers/*/src/**'
+      - 'servers/*/Dockerfile'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to deploy'
+        required: true
+        type: choice
+        options:
+          - yelp-fusionai-mcp
+          - server-stochasticthinking
+          - server-clear-thought
+          - server-yelp-fusionai
+
+jobs:
+  deploy-to-smithery:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Enable Corepack
+      run: corepack enable
+    
+    - name: Set Yarn Version
+      run: corepack prepare yarn@4.6.0 --activate
+    
+    - name: Cache Yarn Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          .yarn/cache
+          node_modules
+          */*/node_modules
+        key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-yarn-
+    
+    - name: Install dependencies
+      run: yarn install --immutable
+    
+    - name: Install Smithery CLI
+      run: npm install -g @smithery/cli
+    
+    - name: Login to Smithery
+      run: smithery login
+      env:
+        SMITHERY_TOKEN: ${{ secrets.SMITHERY_TOKEN }}
+    
+    - name: Deploy specified package (manual trigger)
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        cd servers/${{ github.event.inputs.package }}
+        smithery deploy
+    
+    - name: Deploy changed packages (auto trigger)
+      if: github.event_name == 'push'
+      run: |
+        # Get list of changed packages
+        CHANGED_PACKAGES=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep -o "servers/[^/]*" | sort | uniq)
+        
+        for package in $CHANGED_PACKAGES; do
+          # Check if smithery.yaml exists
+          if [ -f "$package/smithery.yaml" ]; then
+            echo "Deploying $package to Smithery"
+            cd $package
+            smithery deploy
+            cd ../..
+          fi
+        done

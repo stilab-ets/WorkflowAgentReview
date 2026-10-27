@@ -1,0 +1,51 @@
+name: Windows Cuda native build
+
+permissions:
+    contents: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      BuildConfig:
+        required: true
+        type: string
+        default: 'Release'
+
+jobs:
+  native-build:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+        with:
+          submodules: true
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+
+      - name: Install OpenCl with vcpkg
+        run: |
+          vcpkg --triplet=x64-windows install opencl
+
+      - name: Install CUDA Toolkit
+        uses: Jimver/cuda-toolkit@8022558310ea543e35132143092835585f60e628
+        with:
+          cuda: "12.1.0"
+
+      - name: Run Build
+        run: |
+          Import-Module ./windows-scripts.ps1
+          BuildWindows -Arch "x64" -Cuda $true -Configuration ${{ inputs.BuildConfig }}
+        shell: pwsh
+
+      - name: Remove CUDA installer
+        run: Remove-Item -Path 'cuda_installer-*' -Recurse -Force -ErrorAction Ignore
+
+      - name: Upload Windows Cuda Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-cuda-build
+          path: "runtimes/Whisper.net.Run*/win-*/*"
+          retention-days: 7

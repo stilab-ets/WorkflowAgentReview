@@ -1,0 +1,48 @@
+name: Build and Test
+
+on:
+  push:
+
+jobs:
+  build:
+    name: Build, Typecheck, and Test Python
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install the project
+        run: uv sync --all-extras --dev
+
+      # Remove this later: needed as server expects this dir to exist
+      - name: Mock Studio Web UI
+        run: mkdir -p ./app/web_ui/build && echo "test" > ./app/web_ui/build/index.html
+
+      - name: Test All Python
+        run: uv run python3 -m pytest .
+
+      - name: Check Python Types
+        run: uvx ty check
+
+      - name: Build Core
+        run: uv build
+        working-directory: ./libs/core
+
+      - name: Build Server
+        run: uv build
+        working-directory: ./libs/server

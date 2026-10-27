@@ -1,0 +1,220 @@
+# This workflow will run pytest.
+#
+# There are three jobs which run in parallel:
+# 1. pytest-fast: Run fast tests only, and fail fast so the dev knows asap if they broke something.
+# 2. pytest-no-creds: Run tests only if they don't require creds. The main use case is to run tests
+#    on forks, where secrets are not available. We flush the GCP_GSM_CREDENTIALS env var to an
+#    invalid value to ensure that tests that require creds are not run.
+# 3. pytest: Run all tests, across multiple python versions.
+#
+# Note that pytest-fast also skips tests that require credentials, allowing it to run on forks.
+name: Run Tests
+
+on:
+    push:
+      branches:
+      - main
+    pull_request: {}
+
+env:
+  AIRBYTE_ANALYTICS_ID: ${{ vars.AIRBYTE_ANALYTICS_ID }}
+
+jobs:
+  pytest-fast:
+    name: Pytest (Fast)
+    runs-on: ubuntu-latest
+    steps:
+    # Common steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Set up Poetry
+      uses: Gr1N/setup-poetry@v9
+      with:
+        poetry-version: "1.7.1"
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'poetry'
+    - name: Install dependencies
+      run: poetry install
+
+    - name: Run Pytest with Coverage (Fast Tests Only)
+      timeout-minutes: 60
+      env:
+        GCP_GSM_CREDENTIALS: ${{ secrets.GCP_GSM_CREDENTIALS }}
+      run: >
+        poetry run coverage run -m pytest
+        --durations=5 --exitfirst
+        -m "not slow and not requires_creds and not linting and not flaky"
+
+    - name: Run Pytest with Coverage (Flaky Tests Only)
+      timeout-minutes: 60
+      continue-on-error: true
+      env:
+        GCP_GSM_CREDENTIALS: ${{ secrets.GCP_GSM_CREDENTIALS }}
+      run: >
+        poetry run coverage run -m pytest
+        --durations=5 --exitfirst
+        -m "flaky and not slow and not requires_creds"
+
+    - name: Print Coverage Report
+      if: always()
+      run: poetry run coverage report
+
+    - name: Create Coverage Artifacts
+      if: always()
+      run: |
+        poetry run coverage html -d htmlcov
+        poetry run coverage xml -o htmlcov/coverage.xml
+
+    - name: Upload coverage to GitHub Artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fasttest-coverage
+        path: htmlcov/
+
+  pytest-no-creds:
+    name: Pytest (No Creds)
+    runs-on: ubuntu-latest
+    steps:
+    # Common steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Set up Poetry
+      uses: Gr1N/setup-poetry@v9
+      with:
+        poetry-version: "1.7.1"
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'poetry'
+    - name: Install dependencies
+      run: poetry install
+
+    # Job-specific step(s):
+    - name: Run Pytest (No-Creds)
+      timeout-minutes: 60
+      env:
+        # Force this to a blank value.
+        GCP_GSM_CREDENTIALS: ""
+      run: >
+        poetry run coverage run -m pytest
+        --durations=5 --exitfirst
+        -m "not requires_creds and not linting and not super_slow and not flaky"
+
+    - name: Print Coverage Report
+      if: always()
+      run: poetry run coverage report
+
+    - name: Create Coverage Artifacts
+      if: always()
+      run: |
+        poetry run coverage html -d htmlcov
+        poetry run coverage xml -o htmlcov/coverage.xml
+
+    - name: Upload coverage to GitHub Artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: nocreds-test-coverage
+        path: htmlcov/
+
+  pytest:
+    name: Pytest (All, Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    # Don't run on forks. Run on pushes to main, and on PRs that are not from forks.
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event.pull_request.head.repo.fork == false)
+    strategy:
+      matrix:
+        python-version: [
+          '3.10',
+          '3.11',
+        ]
+        os: [
+          Ubuntu,
+          Windows,
+        ]
+      fail-fast: false
+
+    runs-on: "${{ matrix.os }}-latest"
+    env:
+      # Enforce UTF-8 encoding so Windows runners don't fail inside the connector code.
+      # TODO: See if we can fully enforce this within PyAirbyte itself.
+      PYTHONIOENCODING: utf-8
+    steps:
+    # Common steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Set up Poetry
+      uses: Gr1N/setup-poetry@v9
+      with:
+        poetry-version: "1.7.1"
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'poetry'
+    - name: Install dependencies
+      run: poetry install
+
+    # Job-specific step(s):
+    - name: Print Snowflake Test Environment Info
+      if: ${{ !github.event.pull_request.head.repo.fork }}
+      run: |
+        echo "=== Snowflake Test Environment ==="
+        echo "Python version:"
+        poetry run python --version
+        echo "Snowflake connector version:"
+        poetry run python -c "import snowflake.connector; print(snowflake.connector.__version__)"
+
+    - name: Run Pytest
+      timeout-minutes: 60
+      env:
+        GCP_GSM_CREDENTIALS: ${{ secrets.GCP_GSM_CREDENTIALS }}
+      run: >
+        poetry run coverage run -m pytest
+        --verbose
+        -m "not linting and not super_slow and not flaky"
+
+    - name: Print Coverage Report
+      if: always()
+      run: poetry run coverage report
+
+    - name: Create Coverage Artifacts
+      if: always()
+      run: |
+        poetry run coverage html -d htmlcov
+        poetry run coverage xml -o htmlcov/coverage.xml
+
+    - name: Upload coverage to GitHub Artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: py${{ matrix.python-version }}-${{ matrix.os }}-test-coverage
+        path: htmlcov/
+
+  dependency-analysis:
+    name: Dependency Analysis with Deptry
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: Set up Poetry
+      uses: Gr1N/setup-poetry@v9
+      with:
+        poetry-version: "1.7.1"
+    - name: Install dependencies
+      run: poetry install
+
+    # Job-specific step(s):
+    - name: Run Deptry
+      run: |
+        poetry run deptry .

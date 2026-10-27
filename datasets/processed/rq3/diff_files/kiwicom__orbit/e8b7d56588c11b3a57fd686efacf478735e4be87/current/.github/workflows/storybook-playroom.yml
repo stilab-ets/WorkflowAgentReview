@@ -1,0 +1,99 @@
+name: Storybook
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - "**"
+
+env: # Set environment variables for every job and step in this workflow
+  CLICOLOR: "1" # Enable colors for *NIX commands
+  PY_COLORS: "1" # Enable colors for Python-based utilities
+  FORCE_COLOR: "1" # Force colors in the terminal
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # for dependabot
+      contents: write # for deploying to GitHub Pages on master
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: ./.github/actions/node
+
+      - name: Compile design tokens
+        run: yarn tokens build
+
+      - name: Build tailwind
+        run: yarn tailwind-preset build
+
+      - name: Build Orbit components
+        run: yarn components build
+
+      - name: Build Playroom
+        run: yarn components build:playroom
+
+      - name: Build Storybook
+        run: yarn components build:storybook
+
+      - name: Get BRANCH_URL
+        # do not run on master branch
+        if: github.ref != 'refs/heads/master'
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: echo "BRANCH_URL=$(sed -e 's/[^a-zA-Z0-9]/-/g' <<< ${BRANCH_NAME})" >> $GITHUB_ENV
+
+      - name: Get DOMAIN
+        if: github.ref != 'refs/heads/master'
+        run: echo "DOMAIN=https://kiwicom-orbit-${BRANCH_URL}.surge.sh" >> $GITHUB_ENV
+
+      - name: Get Playroom DOMAIN
+        if: github.ref != 'refs/heads/master'
+        run: echo "DOMAIN_PLAYROOM=${DOMAIN}/playroom" >> $GITHUB_ENV
+
+      - name: Deploy to staging
+        if: github.ref != 'refs/heads/master'
+        run: yarn components deploy:surge ${DOMAIN} --token ${{ secrets.SURGE_TOKEN }}
+
+      - name: Add comment to PR
+        if: github.ref != 'refs/heads/master'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const commentBody = `Storybook staging is available at ${process.env.DOMAIN}\n Playroom staging is available at ${process.env.DOMAIN_PLAYROOM}`;
+
+            const commentsList = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const comment = commentsList.data.find((comment) => comment.body.includes(commentBody));
+
+            if (!comment) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: commentBody,
+              })
+            } else {
+              github.rest.issues.updateComment({
+                comment_id: comment.id,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: commentBody,
+              })
+            }
+
+      - name: Deploy to production
+        # run on master branch
+        if: github.ref == 'refs/heads/master'
+        run: yarn components deploy:storybook --ci
+        env:
+          GH_TOKEN: ${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,41 @@
+name: client build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'client/**'
+      - '!client/**/*.md'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'client/**'
+      - '!client/**/*.md'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: './client/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run build
+        run: npm run build:static
+        env:
+          NEXT_PUBLIC_API_BASEPATH: ''
+          NEXT_PUBLIC_PUBLIC_API_KEY: 'xxxxxxxxxx'
+          NEXT_PUBLIC_OUTPUT_MODE: 'export'

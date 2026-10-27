@@ -1,0 +1,99 @@
+name: "Execution benchmarks"
+
+on:
+  push:
+    # TODO(ayush): remove after feat/new-execution is merged
+    branches: ["main", "feat/new-execution"]
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches: ["**"]
+    paths:
+      - "benchmarks/execute/**"
+      - "crates/circuits/**"
+      - "crates/toolchain/**"
+      - "crates/prof/**"
+      - "crates/sdk/**"
+      - "crates/vm/**"
+      - "extensions/**"
+      - "Cargo.toml"
+      - ".github/workflows/benchmarks-execute.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  codspeed-walltime-benchmarks:
+    name: Run codspeed walltime benchmarks
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+      - extras=s3-cache
+
+    env:
+      CODSPEED_RUNNER_MODE: walltime
+
+    steps:
+      - uses: runs-on/action@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Install codspeed
+        run: cargo binstall --no-confirm --force cargo-codspeed
+
+      - name: Build benchmarks
+        working-directory: benchmarks/execute
+        run: cargo codspeed build
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v3
+        with:
+          working-directory: benchmarks/execute
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
+        env:
+          CODSPEED_RUNNER_MODE: walltime
+
+  codspeed-instrumentation-benchmarks:
+    name: Run codspeed instrumentation benchmarks
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+      - extras=s3-cache
+    if: github.event_name != 'pull_request'
+
+    env:
+      CODSPEED_RUNNER_MODE: instrumentation
+
+    steps:
+      - uses: runs-on/action@v1
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Install codspeed
+        run: cargo binstall --no-confirm --force cargo-codspeed
+
+      - name: Build benchmarks
+        working-directory: benchmarks/execute
+        run: cargo codspeed build
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@v3
+        with:
+          working-directory: benchmarks/execute
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
+        env:
+          CODSPEED_RUNNER_MODE: instrumentation

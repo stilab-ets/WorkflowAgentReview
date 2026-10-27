@@ -1,0 +1,206 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - "**"
+
+env: # Set environment variables for every job and step in this workflow
+  CLICOLOR: "1" # Enable colors for *NIX commands
+  PY_COLORS: "1" # Enable colors for Python-based utilities
+  FORCE_COLOR: "1" # Force colors in the terminal
+
+jobs:
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: ./.github/actions/node
+
+      - name: Build
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          yarn tokens build
+          yarn tailwind-preset build
+          yarn components build
+          yarn tracking build
+          yarn themer build
+
+      - name: Type checks
+        run: yarn check:types
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: ./.github/actions/node
+
+      - name: Build
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          yarn tokens build
+          yarn tailwind-preset build
+          yarn components build
+          yarn tracking build
+          yarn themer build
+
+      - name: Lint
+        run: |
+          yarn eslint:ci
+          yarn prettier:test
+          yarn check:css
+
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: ./.github/actions/node
+
+      - name: Build
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          yarn tokens build
+          yarn tailwind-preset build
+          yarn components build
+          yarn tracking build
+          yarn themer build
+
+      - name: Unit tests
+        env:
+          FIGMA_TOKEN: ${{ secrets.FIGMA_TOKEN }}
+        run: |
+          yarn tailwind-preset pretest
+          yarn test-ci
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: ./.github/actions/node
+
+      - name: Restore Gatsby cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            docs/.cache
+            docs/public
+          key: gatsby-${{ github.ref}}-${{ hashFiles('docs/gatsby-config.js', 'docs/gatsby-node.js') }}
+          restore-keys: |
+            gatsby-${{ github.ref}}-
+            gatsby-
+
+      - name: Build
+        env:
+          FIGMA_TOKEN: ${{ secrets.FIGMA_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GATSBY_EXPERIMENTAL_PAGE_BUILD_ON_DATA_CHANGES: true
+          NODE_OPTIONS: "--max_old_space_size=4096"
+
+        run: |
+          yarn orbit-kiwi:build
+
+      - name: Check links
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: yarn check:links
+
+  test-ct:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.44.1-jammy
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4]
+        shardTotal: [4]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install
+        uses: ./.github/actions/node
+      - name: Build
+        run: |
+          apt-get update
+          apt-get install zip --yes
+          yarn tokens build
+          yarn tailwind-preset build
+          yarn components build
+      - name: Test Components
+        run: yarn components test-ct --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --reporter=blob
+      - name: Upload blob report artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shardIndex }}
+          path: packages/orbit-components/blob-report
+          retention-days: 1
+
+  test-ct-report:
+    name: Visual Regression Tests Report
+    runs-on: ubuntu-latest
+    # We want to execute it if test-ct fails, but only after it finishes
+    if: ${{ always() && needs.test-ct.result == 'failure' }}
+    needs: test-ct
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install
+        uses: ./.github/actions/node
+      - name: Download blob reports artifacts
+        id: download
+        uses: actions/download-artifact@v4
+        with:
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+      - name: Merge into HTML Report
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
+      - name: Deploy Tests Report
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          BRANCH_URL=$(echo ${BRANCH_NAME} | sed -e 's/[^a-zA-Z0-9]/-/g')
+          DOMAIN=https://kiwicom-orbit-test-report-${BRANCH_URL}.surge.sh
+          yarn deploy:report ${DOMAIN} --token ${{ secrets.SURGE_TOKEN }}
+
+  cypress:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: ./.github/actions/node
+
+      - name: Build
+        run: |
+          yarn tokens build
+          yarn tailwind-preset build
+          yarn components build
+
+      - name: Cypress
+        uses: cypress-io/github-action@v6
+        with:
+          browser: chrome
+          install: false
+          working-directory: packages/orbit-components
+          start: yarn cy:dev

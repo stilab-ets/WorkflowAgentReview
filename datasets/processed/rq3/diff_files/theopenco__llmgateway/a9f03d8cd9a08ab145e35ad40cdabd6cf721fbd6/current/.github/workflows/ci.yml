@@ -1,0 +1,26 @@
+name: ci
+on: push
+jobs:
+  lint:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm lint
+
+  build:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm build && bash .github/start.sh
+
+  test:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm run setup && pnpm test:unit
+
+  e2e:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm run setup && pnpm test:e2e

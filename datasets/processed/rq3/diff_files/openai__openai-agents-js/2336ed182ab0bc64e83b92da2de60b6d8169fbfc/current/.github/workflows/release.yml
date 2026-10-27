@@ -1,0 +1,64 @@
+name: Changesets
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types:
+      - completed
+    branches:
+      - main
+
+env:
+  CI: true
+
+jobs:
+  version:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.repository_owner == 'openai' }}
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout code repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Create and publish versions
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          commit: 'chore: update versions'
+          title: 'chore: update versions'
+          publish: pnpm ci:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+          NPM_CONFIG_ACCESS: public
+
+      - name: Tag release
+        run: |
+          version=$(jq -r '.version' packages/agents/package.json)
+          tag="v${version}"
+          if git rev-parse "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists"
+          else
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "$tag"
+          fi

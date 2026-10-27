@@ -1,0 +1,75 @@
+name: E2E API Tests
+
+env:
+  NX_CLOUD_ACCESS_TOKEN: ${{ secrets.NX_CLOUD_ACCESS_TOKEN }}
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+on:
+  workflow_call:
+    inputs:
+      ee:
+        description: 'use the ee version of api'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  e2e_api:
+    name: Test E2E
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout with submodules
+        if: ${{ inputs.ee }}
+        with:
+          submodules: true
+          token: ${{ secrets.SUBMODULES_TOKEN }}
+
+      # Else checkout without submodules if the token is not provided
+      - uses: actions/checkout@v4
+        name: Checkout
+        if: ${{ !inputs.ee }}
+
+      - uses: ./.github/actions/setup-project
+        name: Setup project
+        with:
+          submodules: ${{ inputs.ee }}
+
+      - uses: ./.github/actions/start-localstack
+        name: Start localstack
+
+      - name: Build API & Worker
+        run: CI='' pnpm nx run-many --target=build --all --projects=@novu/api-service,@novu/worker
+
+      - name: Start Worker
+        shell: bash
+        env:
+          NOVU_ENTERPRISE: ${{ inputs.ee }}
+        run: |
+          # Start the worker service in the background
+          cd apps/worker && npm run start:test &
+
+      - name: Wait on worker
+        shell: bash
+        run: wait-on --timeout=180000 http://127.0.0.1:1342/v1/health-check
+
+      - name: Build API
+        run: cd apps/api && pnpm build:metadata
+
+      - name: Run Novu V1 E2E tests
+        if: ${{ !inputs.ee }}
+        run: |
+          set -e
+          pnpm --filter @novu/api-service test:e2e:novu-v0
+
+      - name: Run Novu V2 E2E tests
+        if: ${{ inputs.ee }}
+        run: |
+          set -e
+          pnpm --filter @novu/api-service test:e2e:novu-v2

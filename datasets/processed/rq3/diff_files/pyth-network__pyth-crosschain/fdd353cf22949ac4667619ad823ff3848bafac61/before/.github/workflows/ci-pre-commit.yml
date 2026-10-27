@@ -1,0 +1,59 @@
+name: Pre-commit checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  POETRY_VERSION: "1.4.2"
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: default
+          toolchain: 1.82.0
+      - name: Install Rust versions
+        run: |
+          rustup install 1.73.0
+          rustup install 1.66.1
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            apps/fortuna
+            apps/hermes/server
+            target_chains/ethereum/sdk/stylus
+            target_chains/cosmwasm
+            target_chains/fuel/contracts
+            target_chains/solana
+            governance/remote_executor
+            lazer
+            pythnet/message_buffer
+            pythnet/pythnet_sdk
+            pythnet/stake_caps_parameters
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install poetry
+        run: pipx install poetry
+      - name: Install g++ 12
+        run: |
+          sudo apt-get install g++-12
+          echo "CXX=/usr/bin/g++-12" >> "${GITHUB_ENV}"
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+        id: setup_python
+      - name: Cache Poetry cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-cache-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ env.POETRY_VERSION }}
+      - uses: pre-commit/action@v3.0.0

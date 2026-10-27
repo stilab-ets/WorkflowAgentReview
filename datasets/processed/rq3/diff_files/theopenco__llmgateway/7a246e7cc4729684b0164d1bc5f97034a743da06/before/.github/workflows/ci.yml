@@ -1,0 +1,34 @@
+name: ci
+on:
+  push:
+  merge_group:
+jobs:
+  lint:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm lint
+
+  generate:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm generate && git diff --exit-code
+
+  build:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm build && bash .github/start.sh
+
+  test:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm run setup && pnpm test:unit
+
+  e2e:
+    uses: ./.github/workflows/run.yml
+    secrets: inherit
+    with:
+      cmd: pnpm run setup && pnpm test:e2e

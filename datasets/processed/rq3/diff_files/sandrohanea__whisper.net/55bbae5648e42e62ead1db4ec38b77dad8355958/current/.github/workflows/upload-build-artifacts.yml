@@ -1,0 +1,60 @@
+name: Upload Build Artifacts
+
+permissions:
+  contents: write
+
+on:
+  workflow_call:
+
+jobs:
+  upload-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set release info
+        id: release-info
+        run: |
+          echo "date=$(date -u +'%Y%m%d-%H%M')" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git -C whisper.cpp rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing release with same commit
+        id: check-release
+        run: |
+          TAG="preview-nativelibs-${{ steps.release-info.outputs.commit }}"
+          echo "Checking if release with tag $TAG exists..."
+          if gh release view "$TAG" --json tagName &>/dev/null; then
+            echo "release_exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download Artifacts
+        if: steps.check-release.outputs.release_exists != 'true'
+        id: download-artifact
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: runtime-artifacts
+
+      - name: Zip Artifacts
+        if: steps.check-release.outputs.release_exists != 'true'
+        run: |
+          zip -r native-runtimes.zip runtime-artifacts
+
+      - name: Create preview release
+        if: steps.check-release.outputs.release_exists != 'true'
+        uses: ncipollo/release-action@90dc22b77f7e5e8d3a3a92924b18415dca53f445
+        with:
+          tag: preview-nativelibs-${{ steps.release-info.outputs.commit }}
+          name: Preview NativeLibs ${{ steps.release-info.outputs.date }} (${{ steps.release-info.outputs.commit }})
+          artifacts: native-runtimes.zip
+          prerelease: true
+          body: |
+            These are the native libraries built from [whisper.cpp](https://github.com/ggml-org/whisper.cpp) at commit `${{ steps.release-info.outputs.commit }}`.
+
+            This release was automatically generated on `${{ steps.release-info.outputs.date }}`.

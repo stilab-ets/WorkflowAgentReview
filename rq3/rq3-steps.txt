@@ -1,0 +1,37 @@
+# RQ3 methodology: syntactic entity changes in GHA workflow files
+
+1. Start with the final APR and HPR study sample. A PR enters the study only
+   when its first commit changes a file under `.github/workflows/`.
+
+2. Identify the workflow files changed in each retained first commit. Exclude
+   whole added and deleted workflow files to avoid bias from file-level states.
+   The comparison therefore uses workflow files with both versions: 348 APR
+   files and 313 HPR files. File-level renames are not compared.
+
+3. Obtain the workflow version before the first commit and compare it with the
+   version at that commit. The package uses the archived snapshots and fetches
+   a missing snapshot from its commit-pinned GitHub URL.
+
+4. Run GAWD on each before/after pair to obtain YAML-key operations: added,
+   changed, removed, moved, and renamed.
+
+5. Retain added, changed, and removed operations. Exclude moved and renamed
+   operations. Store GAWD's `changed` operation as `modified` in the dataset.
+
+6. Normalize paths so the same workflow entity can be compared across
+   repositories: replace job IDs and environment-variable names with generic
+   placeholders and replace numeric list positions with `[<index>]`.
+
+7. Group normalized paths by workflow structure, retaining one sub-level for
+   workflow, job, and step entities. Changes to a whole step and to its
+   standard keys are grouped as `jobs.<job_id>.steps[<index>]`.
+
+8. Keep every observed entity, including entities that occur once. Do not use
+   a frequency threshold. Group non-standard keys under `others`.
+
+9. For each grouped entity, calculate the percentage of syntactic changes by
+   PR type (APR or HPR) and operation state (added, changed, or removed).
+   The change-state percentages within each PR type sum to 100%.
+
+10. Order the grouped entities by their position in a GitHub Actions workflow
+    and write the result as the RQ3 entity-change table (paper Table IV).

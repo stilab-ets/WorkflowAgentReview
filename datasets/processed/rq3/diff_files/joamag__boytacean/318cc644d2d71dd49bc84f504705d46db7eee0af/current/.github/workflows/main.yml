@@ -1,0 +1,312 @@
+name: Main Workflow
+on:
+  push:
+  schedule:
+    - cron: "0 0 * * 0"
+jobs:
+  build:
+    name: Build
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        rust-version: [
+          "1.82.0",
+          "1.83.0",
+          "1.84.0",
+          "1.85.0",
+          "latest"
+        ]
+    runs-on: ubuntu-latest
+    container: rust:${{ matrix.rust-version }}
+    steps:
+      - name: Checkout code from repository
+        uses: actions/checkout@v4
+      - name: Install Rust components
+        run: |
+          rustup component add rustfmt
+          rustup component add clippy
+      - name: Print Rust information
+        run: rustc --version
+      - name: Verify Rust code format
+        run: cargo fmt --all -- --check
+      - name: Verify Rust code linting
+        run: cargo clippy -- -D warnings -A unknown-lints
+      - name: Run unit tests
+        run: cargo test
+      - name: Run benchmarks
+        run: cargo bench
+      - name: Build development version
+        run: cargo build
+      - name: Build release version
+        run: cargo build --release
+  build-simple:
+    name: Build Simple
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        rust-version: [
+          "1.82.0",
+          "1.83.0",
+          "1.84.0",
+          "1.85.0",
+          "latest"
+        ]
+    runs-on: ubuntu-latest
+    container: rust:${{ matrix.rust-version }}
+    steps:
+      - name: Checkout code from repository
+        uses: actions/checkout@v4
+      - name: Install Rust components
+        run: |
+          rustup component add rustfmt
+          rustup component add clippy
+      - name: Print Rust information
+        run: rustc --version
+      - name: Verify Rust code format
+        run: cargo fmt --all -- --check
+      - name: Verify Rust code linting
+        run: cargo clippy -- -D warnings -A unknown-lints
+      - name: Build development version
+        run: cargo build
+      - name: Build release version
+        run: cargo build --release
+  build-wasm:
+    name: Build WASM
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        rust-version: [
+          "1.82.0",
+          "1.83.0",
+          "1.84.0",
+          "1.85.0",
+          "latest"
+        ]
+        node-version: ["18"]
+    runs-on: ubuntu-latest
+    container: rust:${{ matrix.rust-version }}
+    steps:
+      - name: Checkout code from repository
+        uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y -q cmake
+      - name: Install Rust components
+        run: |
+          rustup component add rustfmt
+          rustup component add clippy
+      - name: Print Rust information
+        run: rustc --version
+      - name: Verify Rust code format
+        run: cargo fmt --all -- --check
+      - name: Verify Rust code linting
+        run: cargo clippy -- -D warnings -A unknown-lints
+      - name: Run unit tests
+        run: cargo test
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+      - name: Build WASM Web binary
+        run: wasm-pack build --release --target=web --out-dir=frontends/web/lib -- --features wasm
+      - name: Install Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Build and lint Web code
+        run: cd frontends/web && npm install && npm run build && npm run lint
+  build-sdl:
+    name: Build SDL
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        rust-version: [
+          "1.82.0",
+          "1.83.0",
+          "1.84.0",
+          "1.85.0",
+          "latest"
+        ]
+    runs-on: ubuntu-latest
+    container: rust:${{ matrix.rust-version }}
+    steps:
+      - name: Checkout code from repository
+        uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y -q zip python3-jinja2
+      - name: Install Rust components
+        run: |
+          rustup component add rustfmt
+          rustup component add clippy
+      - name: Print Rust information
+        run: rustc --version
+      - name: Cache SDL build
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.vcpkg-root
+            ~/.cache/vcpkg
+            ~/vcpkg
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('frontends/sdl/Cargo.toml') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-
+      - name: Install SDL dependencies
+        run: cd frontends/sdl && cargo install cargo-vcpkg && cargo vcpkg -v build
+      - name: Verify Rust code format
+        run: cd frontends/sdl && cargo fmt --all -- --check
+      - name: Verify Rust code linting
+        run: cd frontends/sdl && cargo update -p half --precise 2.2.1 && cargo clippy -- -D warnings -A unknown-lints
+      - name: Run unit tests
+        run: cd frontends/sdl && cargo test
+      - name: Run all unit tests
+        run: cargo test --all
+      - name: Build development version
+        run: cd frontends/sdl && cargo build
+      - name: Build release version
+        run: cd frontends/sdl && cargo build --release
+      - name: Run release version
+        run: cd frontends/sdl && cargo run --release -- --headless --cycles 10000000
+      - name: Run benchmark
+        run: cd frontends/sdl && cargo run --release -- --benchmark
+      - name: Run benchmark, only for CPU
+        run: cd frontends/sdl && cargo run --release -- --benchmark --benchmark-cpu
+  build-libretro:
+    name: Build Libretro
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        rust-version: [
+          "1.82.0",
+          "1.83.0",
+          "1.84.0",
+          "1.85.0",
+          "latest"
+        ]
+    runs-on: ubuntu-latest
+    container: rust:${{ matrix.rust-version }}
+    steps:
+      - name: Checkout code from repository
+        uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y -q zip
+      - name: Install Rust components
+        run: |
+          rustup component add rustfmt
+          rustup component add clippy
+      - name: Print Rust information
+        run: rustc --version
+      - name: Verify Rust code format
+        run: cd frontends/libretro && cargo fmt --all -- --check
+      - name: Verify Rust code linting
+        run: cd frontends/libretro && cargo clippy -- -D warnings -A unknown-lints
+      - name: Run unit tests
+        run: cd frontends/libretro && cargo test
+      - name: Build development version
+        run: cd frontends/libretro && cargo build
+      - name: Build release version
+        run: cd frontends/libretro && cargo build --release
+  build-libretro-android:
+    name: Build Libretro Android
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        rust-version: [
+          "1.82.0",
+          "1.83.0",
+          "1.84.0",
+          "1.85.0",
+          "latest"
+        ]
+    runs-on: ubuntu-latest
+    container: rust:${{ matrix.rust-version }}
+    steps:
+      - name: Checkout code from repository
+        uses: actions/checkout@v4
+      - name: Install Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r25c
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y -q zip
+      - name: Install Rust components
+        run: |
+          rustup component add rustfmt
+          rustup component add clippy
+      - name: Print Rust information
+        run: rustc --version
+      - name: Setup local NDK
+        run: |
+          mkdir -p ndk
+          ${NDK_HOME}/build/tools/make_standalone_toolchain.py --api 26 --arch arm64 --install-dir ndk/arm64
+          ${NDK_HOME}/build/tools/make_standalone_toolchain.py --api 26 --arch arm --install-dir ndk/arm
+          ${NDK_HOME}/build/tools/make_standalone_toolchain.py --api 26 --arch x86 --install-dir ndk/x86
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+      - name: Add Rust Android targets
+        run: |
+          rustup target add aarch64-linux-android
+          rustup target add armv7-linux-androideabi
+          rustup target add i686-linux-android
+      - name: Verify Rust code format
+        run: cd frontends/libretro && cargo fmt --all -- --check
+      - name: Verify Rust code linting
+        run: cd frontends/libretro && cargo clippy -- -D warnings -A unknown-lints
+      - name: Run unit tests
+        run: cd frontends/libretro && cargo test
+      - name: Build development version
+        run: |
+          cd frontends/libretro
+          cargo build --target=aarch64-linux-android
+          cargo build --target=armv7-linux-androideabi
+          cargo build --target=i686-linux-android
+      - name: Build release version
+        run: |
+          cd frontends/libretro
+          cargo build --target=aarch64-linux-android --release
+          cargo build --target=armv7-linux-androideabi --release
+          cargo build --target=i686-linux-android --release
+  build-docs:
+    name: Build Documentation
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        rust-image: [
+          "rust:1.82.0",
+          "rust:1.83.0",
+          "rust:1.84.0",
+          "rust:1.85.0",
+          "rust:latest",
+          "rustlang/rust:nightly"
+        ]
+    runs-on: ubuntu-latest
+    container: ${{ matrix.rust-image }}
+    steps:
+      - name: Checkout code from repository
+        uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: |
+          apt-get update
+          apt-get install -y -q zip python3-jinja2
+      - name: Install Rust components
+        run: |
+          rustup component add rustfmt
+          rustup component add clippy
+      - name: Print Rust information
+        run: rustc --version
+      - name: Install SDL dependencies
+        run: cd frontends/sdl && cargo install cargo-vcpkg && cargo vcpkg -v build
+      - name: Verify Rust code format
+        run: cd frontends/sdl && cargo fmt --all -- --check
+      - name: Verify Rust code linting
+        run: cd frontends/sdl && cargo update -p half --precise 2.2.1 && cargo clippy -- -D warnings -A unknown-lints
+      - name: Build documentation
+        run: cargo doc --all
+      - name: Build all documentation
+        run: cargo doc --all --all-features
+        if: matrix.rust-image == 'rustlang/rust:nightly'

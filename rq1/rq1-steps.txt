@@ -1,0 +1,29 @@
+1. Use the AIDev-Pop dataset containing agent-authored and human-authored pull requests from repositories with at least 100 stars.
+
+2. Select pull requests whose first commit changes at least one GitHub Actions workflow file under `.github/workflows/` with a `.yml` or `.yaml` extension.
+
+3. Extract each selected pull request's metadata, commits, changed-file details, formal reviews, inline review comments, and issue-style comments.
+
+4. Collect additional human-authored pull requests from the same repositories and within each repository's earliest-to-latest agent-PR creation period.
+
+5. Remove bot-authored pull requests while retaining recognized AI coding-agent accounts.
+
+6. Exclude open pull requests because their review cycles are incomplete.
+
+7. Exclude pull requests whose first-commit workflow patch is missing.
+
+8. Retain only repositories containing both agent-authored and human-authored pull requests.
+
+9. Keep all 264 eligible agent-authored pull requests and sample 30% of the human-authored pull requests within each repository without replacement using random seed 42; retain the only human PR in singleton repositories. This produces 258 human-authored pull requests and a final sample of 522 pull requests from 101 repositories.
+
+10. Collect completed CI check runs for every commit and calculate 13 continuous review-effort metrics: reviewers, review comments, discussion comments, commits, total changed files, workflow files changed in the first commit, workflow files changed in revision commits, review duration, discussion length, description length, total code churn, workflow-file code churn, and build failure rate.
+
+11. Calculate pull-request acceptance as a binary outcome based on whether the pull request was merged.
+
+12. Apply the Shapiro-Wilk test separately to the agent and human groups for each continuous metric.
+
+13. Because all continuous metrics are non-normal, compare the two independent groups using two-sided Mann-Whitney U tests and report Cliff's delta effect sizes.
+
+14. Compare acceptance rates using Pearson's chi-squared test and report Cramer's V effect size.
+
+15. Report the minimum, first quartile, median, mean, third quartile, maximum, p-value, and effect size for each metric.

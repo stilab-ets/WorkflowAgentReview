@@ -1,0 +1,52 @@
+name: Build Performance
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths-ignore:
+      - demo/docs/**
+
+jobs:
+  build-size:
+    name: Build Size Report
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4
+        with:
+          node-version: "18"
+          cache: yarn
+      - uses: preactjs/compressed-size-action@946a292cd35bd1088e0d7eb92b69d1a8d5b5d76a # v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          build-script: build
+          clean-script: clean
+          pattern: "{demo/build/assets/js/main*js,demo/build/assets/js/runtime~main*js,demo/build/assets/css/styles*css,demo/.docusaurus/globalData.json,demo/.docusaurus/registry.js,demo/.docusaurus/routes.js,demo/.docusaurus/routesChunkNames.json,demo/.docusaurus/site-metadata.json,demo/.docusaurus/codeTranslations.json,demo/.docusaurus/i18n.json,demo/.docusaurus/docusaurus.config.mjs,demo/build/index.html,demo/build/petstore/**/*.html}"
+          strip-hash: '\.([^;]\w{7})\.'
+          minimum-change-threshold: 30
+          compression: none
+
+  build-time:
+    name: Build Time Perf
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # v4
+        with:
+          cache: yarn
+      - name: Installation
+        run: yarn
+
+      # Ensure build with a cold cache does not increase too much
+      - name: Build (cold cache)
+        run: yarn build
+        timeout-minutes: 8
+
+      # Ensure build with a warm cache does not increase too much
+      - name: Build (warm cache)
+        run: yarn build
+        timeout-minutes: 2
+    # TODO post a Github comment with build with perf warnings?

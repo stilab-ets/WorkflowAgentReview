@@ -1,0 +1,348 @@
+name: Test
+
+on:
+  workflow_call:
+
+jobs:
+  mage:
+    runs-on: ubuntu-latest
+    name: prepare-mage
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: stable
+      - name: Cache Mage
+        id: cache-mage
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4
+        with:
+          key: ${{ runner.os }}-build-mage-${{ hashFiles('magefile.go') }}
+          path: |
+            ./mage-static
+      - name: Compile Mage
+        if: ${{ steps.cache-mage.outputs.cache-hit != 'true' }}
+        uses: magefile/mage-action@6f50bbb8ea47d56e62dee92392788acbc8192d0b # v3
+        with:
+          version: latest
+          args: -compile ./mage-static
+      - name: Store Mage Binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mage_bin
+          path: ./mage-static
+  
+  api-build:
+    runs-on: ubuntu-latest
+    needs: mage
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Download Mage Binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: mage_bin 
+      - name: Git describe
+        id: ghd
+        uses: proudust/gh-describe@v2
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: stable
+      - name: Build
+        env:
+          RELEASE_VERSION: ${{ steps.ghd.outputs.describe }}
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+          chmod +x ./mage-static
+          ./mage-static build
+      - name: Store Vikunja Binary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: vikunja_bin
+          path: ./vikunja
+
+  api-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: stable
+      - name: prepare frontend files
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        with:
+          version: v2.1.0
+  
+  api-check-translations:
+    runs-on: ubuntu-latest
+    needs: mage
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Download Mage Binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: mage_bin
+      - name: Check
+        run: |
+          chmod +x ./mage-static
+          ./mage-static check:translations    
+          
+  test-migration-smoke:
+    runs-on: ubuntu-latest
+    needs:
+      - api-build
+    strategy:
+      matrix:
+        db:
+          - sqlite
+          - postgres
+          - mysql
+    services:
+      migration-smoke-db-mysql:
+        image: mariadb:11@sha256:fcc7fcd7114adb5d41f14d116b8aac45f94280d2babfbbb71b4782922ee6d8d4
+        env:
+          MYSQL_ROOT_PASSWORD: vikunjatest
+          MYSQL_DATABASE: vikunjatest
+        ports:
+          - 3306:3306
+      migration-smoke-db-postgres:
+        image: postgres:17@sha256:6efd0df010dc3cb40d5e33e3ef84acecc5e73161bd3df06029ee8698e5e12c60
+        env:
+          POSTGRES_PASSWORD: vikunjatest
+          POSTGRES_DB: vikunjatest
+        ports:
+          - 5432:5432
+    steps:
+      - name: Download Unstable
+        run: |
+          wget https://dl.vikunja.io/api/unstable/vikunja-unstable-linux-amd64-full.zip -q -O vikunja-latest.zip
+          unzip vikunja-latest.zip vikunja-unstable-linux-amd64
+      - name: Download Vikunja Binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: vikunja_bin
+      - name: run migration
+        env:
+          VIKUNJA_DATABASE_TYPE: ${{ matrix.db }}
+          VIKUNJA_DATABASE_PATH: ./vikunja-migration-test.db
+          VIKUNJA_DATABASE_USER: ${{ matrix.db == 'postgres' && 'postgres' || 'root' }}
+          VIKUNJA_DATABASE_PASSWORD: vikunjatest
+          VIKUNJA_DATABASE_DATABASE: vikunjatest
+          VIKUNJA_DATABASE_SSLMODE: disable
+          VIKUNJA_LOG_DATABASE: stdout
+          VIKUNJA_LOG_DATABASELEVEL: debug
+        run: |
+          # Wait for MySQL to be ready if using MySQL
+          if [ "$VIKUNJA_DATABASE_TYPE" = "mysql" ]; then
+            echo "Waiting for MySQL to be ready..."
+            until mysql -h 127.0.0.1 -u root -pvikunjatest -e "SELECT 1" &> /dev/null; do
+              echo "MySQL not ready yet, waiting 2 seconds..."
+              sleep 2
+            done
+            echo "MySQL is ready!"
+          fi
+          
+          # Wait for PostgreSQL to be ready if using PostgreSQL
+          if [ "$VIKUNJA_DATABASE_TYPE" = "postgres" ]; then
+            echo "Waiting for PostgreSQL to be ready..."
+            until PGPASSWORD=vikunjatest psql -h 127.0.0.1 -U postgres -d vikunjatest -c "SELECT 1" &> /dev/null; do
+              echo "PostgreSQL not ready yet, waiting 2 seconds..."
+              sleep 2
+            done
+            echo "PostgreSQL is ready!"
+          fi
+
+          ./vikunja-unstable-linux-amd64 migrate
+          # Run the migrations from the binary built in the step before
+          chmod +x vikunja
+          ./vikunja migrate
+  
+  test-api:
+    runs-on: ubuntu-latest
+    needs:
+      - mage
+    strategy:
+      matrix:
+        db:
+          - sqlite-in-memory
+          - sqlite
+          - postgres
+          - mysql
+        test:
+          - unit
+          - integration
+    services:
+      db-mysql:
+        image: mariadb:11@sha256:fcc7fcd7114adb5d41f14d116b8aac45f94280d2babfbbb71b4782922ee6d8d4
+        env:
+          MYSQL_ROOT_PASSWORD: vikunjatest
+          MYSQL_DATABASE: vikunjatest
+        ports:
+          - 3306:3306
+      db-postgres:
+        image: postgres:17@sha256:6efd0df010dc3cb40d5e33e3ef84acecc5e73161bd3df06029ee8698e5e12c60
+        env:
+          POSTGRES_PASSWORD: vikunjatest
+          POSTGRES_DB: vikunjatest
+        ports:
+          - 5432:5432
+      test-ldap:
+        image: gitea/test-openldap@sha256:b66527e298d6062d5289dc411d1b8da1c593f8140a3d1f863e8d9d021234122f
+        ports:
+          - 389:389
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Download Mage Binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: mage_bin
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        with:
+          go-version: stable
+      - name: Configure Postgres for faster tests
+        if: matrix.db == 'postgres'
+        run: |
+          # Connect to Postgres and disable fsync, full_page_writes, and synchronous_commit for faster tests
+          PGPASSWORD=vikunjatest psql -h localhost -U postgres -d vikunjatest -c "ALTER SYSTEM SET fsync = off;"
+          PGPASSWORD=vikunjatest psql -h localhost -U postgres -d vikunjatest -c "ALTER SYSTEM SET full_page_writes = off;"
+          PGPASSWORD=vikunjatest psql -h localhost -U postgres -d vikunjatest -c "ALTER SYSTEM SET synchronous_commit = off;"
+          # Reload the configuration
+          PGPASSWORD=vikunjatest psql -h localhost -U postgres -d vikunjatest -c "SELECT pg_reload_conf();"
+      - name: test
+        env:
+          VIKUNJA_TESTS_USE_CONFIG: ${{ matrix.db != 'sqlite-in-memory' && 1 || 0 }}
+          VIKUNJA_DATABASE_TYPE: ${{ matrix.db }}
+          VIKUNJA_DATABASE_USER: ${{ matrix.db == 'postgres' && 'postgres' || 'root' }}
+          VIKUNJA_DATABASE_PASSWORD: vikunjatest
+          VIKUNJA_DATABASE_DATABASE: vikunjatest
+          VIKUNJA_DATABASE_SSLMODE: disable
+          VIKUNJA_AUTH_LDAP_ENABLED: 1
+          VIKUNJA_AUTH_LDAP_HOST: localhost
+          VIKUNJA_AUTH_LDAP_USETLS: 0
+          VIKUNJA_AUTH_LDAP_BASEDN: dc=planetexpress,dc=com
+          VIKUNJA_AUTH_LDAP_BINDDN: uid=gitea,ou=service,dc=planetexpress,dc=com
+          VIKUNJA_AUTH_LDAP_BINDPASSWORD: password
+          VIKUNJA_AUTH_LDAP_USERFILTER: '(&(objectclass=inetorgperson)(uid=%s))'
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+          chmod +x mage-static
+          ./mage-static test:${{ matrix.test }}
+  
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: ./.github/actions/setup-frontend
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint
+
+  frontend-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: ./.github/actions/setup-frontend
+      - name: Typecheck
+        continue-on-error: true
+        working-directory: frontend
+        run: pnpm typecheck
+
+  test-frontend-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: ./.github/actions/setup-frontend
+      - name: Run unit tests
+        working-directory: frontend
+        run: pnpm test:unit
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: ./.github/actions/setup-frontend
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+      - name: Store Frontend
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frontend_dist
+          path: ./frontend/dist
+
+  test-frontend-e2e:
+    runs-on: ubuntu-latest
+    needs:
+      - api-build
+      - frontend-build
+    strategy:
+      # when one test fails, DO NOT cancel the other
+      # containers, because this will kill Cypress processes
+      # leaving Cypress Cloud hanging ...
+      # https://github.com/cypress-io/github-action/issues/48
+      fail-fast: false
+      matrix:
+        containers: [1, 2, 3, 4, 5]
+    container:
+      image: cypress/browsers:latest@sha256:201bee8d17cb4ded4da0ac4432428206805fc4a905f33ebc3cc9c62c1f5877fd
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Download Vikunja Binary
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: vikunja_bin
+      - name: Download Frontend
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: frontend_dist
+          path: ./frontend/dist
+      - run: |
+          chmod +x ./vikunja
+          ./vikunja
+      - uses: cypress-io/github-action@v6
+        with:
+          install: false
+          working-directory: frontend
+          browser: chrome
+          record: true
+          parallel: true
+          start: |
+            npx sirv-cli dist \
+              --single \                 # SPA fallback
+              --host 127.0.0.1 \         # bind only to loopback
+              --port 4173 \              # same port Vite preview uses
+              --quiet \                  # keep CI logs tidy
+              --maxage 31536000 \        # 1 year = 60*60*24*365
+              --immutable \              # mark response as forever-valid
+              --etag                     # enable 304 revalidation when needed
+          wait-on: http://127.0.0.1:4173,http://127.0.0.1:3456/api/v1/info
+          wait-on-timeout: 10
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CYPRESS_RECORD_KEY: ${{ secrets.CYPRESS_RECORD_KEY }}
+          CYPRESS_API_URL: http://127.0.0.1:3456/api/v1
+          CYPRESS_TEST_SECRET: averyLongSecretToSe33dtheDB
+          CYPRESS_DEFAULT_COMMAND_TIMEOUT: 60000
+          VIKUNJA_SERVICE_TESTINGTOKEN: averyLongSecretToSe33dtheDB
+          VIKUNJA_LOG_LEVEL: DEBUG
+          VIKUNJA_CORS_ENABLE: 1
+          VIKUNJA_DATABASE_PATH: memory
+          VIKUNJA_DATABASE_TYPE: sqlite
+          VIKUNJA_RATELIMIT_NOAUTHLIMIT: 1000
+  
+  # This step only exists so that we can make it required, because we can't make 
+  # the actual test step required due to the matrix
+  test-frontend-e2e-success:
+    runs-on: ubuntu-latest
+    needs:
+      - test-frontend-e2e
+    steps:
+      - run: exit 0

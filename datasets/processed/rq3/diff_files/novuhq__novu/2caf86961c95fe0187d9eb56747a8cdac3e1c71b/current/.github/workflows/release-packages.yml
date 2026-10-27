@@ -1,0 +1,68 @@
+name: Release Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: 'Packages to release (comma-separated)'
+        required: true
+        type: string
+        default: '@novu/js,@novu/react,@novu/nextjs,@novu/react-native'
+      version:
+        description: 'Version to release (e.g., v3.0.0)'
+        required: true
+        type: string
+        default: 'v3.0.0'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+          run_install: false
+
+      - name: Setup Node Version
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Release version
+        run: |
+          pnpm nx release version ${{ github.event.inputs.version }} --projects=${{ github.event.inputs.packages }}
+
+      - name: Generate changelog
+        run: |
+          pnpm nx release changelog ${{ github.event.inputs.version }} --projects=${{ github.event.inputs.packages }}
+
+      - name: Build packages
+        run: pnpm run build:packages
+
+      - name: Publish packages
+        run: |
+          pnpm nx release publish --projects=${{ github.event.inputs.packages }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: release ${{ github.event.inputs.version }}"
+          title: "Release ${{ github.event.inputs.version }}"
+          body: |
+            This PR contains the release changes for version ${{ github.event.inputs.version }}
+            
+            Packages released:
+            ${{ github.event.inputs.packages }}
+          branch: release-${{ github.event.inputs.version }}
+          base: next 

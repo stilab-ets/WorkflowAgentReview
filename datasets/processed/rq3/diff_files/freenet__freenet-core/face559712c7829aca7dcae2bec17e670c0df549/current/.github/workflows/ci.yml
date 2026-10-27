@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test_all:
+    name: Test
+
+    runs-on: freenet-default-runner
+
+    strategy:
+      max-parallel: 1
+      matrix:
+        args: ["--no-default-features --features trace,websocket,redb"]
+    env:
+      FREENET_LOG: error
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.12.1
+        with:
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        if: success() || steps.test.conclusion == 'failure'
+        with:
+          shared-key: "rust-cache"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install stdlib packages
+        working-directory: stdlib/typescript
+        run: npm run dev.package
+
+      - name: Build
+        run: |
+          cargo install --locked --force --path ./crates/core
+          cargo install --locked --force --path ./crates/fdev
+          make -C apps/freenet-ping -f run-ping.mk build
+          cargo build --locked
+
+      - name: Test - features
+        run: cargo test --workspace ${{ matrix.args }}
+
+  clippy_check:
+    name: Clippy
+
+    runs-on: freenet-default-runner
+
+    env:
+      FREENET_LOG: error
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.12.1
+        with:
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "rust-cache"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build
+        run: |
+          cargo install --locked --force --path ../../crates/fdev
+          make -f run-ping.mk build
+        working-directory: apps/freenet-ping
+
+      - name: clippy
+        run: cargo clippy -- -D warnings
+
+  fmt_check:
+    name: Fmt
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Check code formatting
+        run: cargo fmt -- --check

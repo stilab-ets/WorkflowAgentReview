@@ -1,0 +1,186 @@
+name: Build repo
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk-version: [17, 21]
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@002fdce3c6a235733a90a27c80493a3241e56863 # v2.12.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up JDK ${{ matrix.jdk-version }}
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          java-version: ${{ matrix.jdk-version }}
+          distribution: "temurin"
+
+      - name: Build with Gradle and no spring security
+        run: ./gradlew clean build
+        env:
+          DISABLE_ADDITIONAL_FEATURES: true
+
+      - name: Build with Gradle and with spring security
+        run: ./gradlew clean build
+        env:
+          DISABLE_ADDITIONAL_FEATURES: false
+
+      - name: Check Test Reports Exist
+        id: check-reports
+        if: always()
+        run: |
+          missing_reports=()
+          
+          # Check for required test report directories
+          if [ ! -d "stirling-pdf/build/reports/tests/" ]; then
+            missing_reports+=("stirling-pdf/build/reports/tests/")
+          fi
+          if [ ! -d "stirling-pdf/build/test-results/" ]; then
+            missing_reports+=("stirling-pdf/build/test-results/")
+          fi
+          if [ ! -d "common/build/reports/tests/" ]; then
+            missing_reports+=("common/build/reports/tests/")
+          fi
+          if [ ! -d "common/build/test-results/" ]; then
+            missing_reports+=("common/build/test-results/")
+          fi
+          if [ ! -d "proprietary/build/reports/tests/" ]; then
+            missing_reports+=("proprietary/build/reports/tests/")
+          fi
+          if [ ! -d "proprietary/build/test-results/" ]; then
+            missing_reports+=("proprietary/build/test-results/")
+          fi
+          
+          # Fail if any required reports are missing
+          if [ ${#missing_reports[@]} -gt 0 ]; then
+            echo "ERROR: The following required test report directories are missing:"
+            printf '%s\n' "${missing_reports[@]}"
+            exit 1
+          fi
+          
+          echo "All required test report directories are present"
+
+      - name: Upload Test Reports
+        if: steps.check-reports.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-reports-jdk-${{ matrix.jdk-version }}
+          path: |
+            stirling-pdf/build/reports/tests/
+            stirling-pdf/build/test-results/
+            stirling-pdf/build/reports/problems/
+            common/build/reports/tests/
+            common/build/test-results/
+            common/build/reports/problems/
+            proprietary/build/reports/tests/
+            proprietary/build/test-results/
+            proprietary/build/reports/problems/
+          retention-days: 3
+
+  check-licence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@002fdce3c6a235733a90a27c80493a3241e56863 # v2.12.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          java-version: "17"
+          distribution: "adopt"
+
+      - name: check the licenses for compatibility
+        run: ./gradlew clean checkLicense
+
+      - name: FAILED - check the licenses for compatibility
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dependencies-without-allowed-license.json
+          path: |
+            build/reports/dependency-license/dependencies-without-allowed-license.json
+          retention-days: 3
+
+  docker-compose-tests:
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+    #     (github.event_name == 'pull_request' &&
+    #     contains(github.event.pull_request.labels.*.name, 'licenses') == false &&
+    #     (
+    #       contains(github.event.pull_request.labels.*.name, 'Front End') ||
+    #       contains(github.event.pull_request.labels.*.name, 'Java') ||
+    #       contains(github.event.pull_request.labels.*.name, 'Back End') ||
+    #       contains(github.event.pull_request.labels.*.name, 'Security') ||
+    #       contains(github.event.pull_request.labels.*.name, 'API') ||
+    #       contains(github.event.pull_request.labels.*.name, 'Docker') ||
+    #       contains(github.event.pull_request.labels.*.name, 'Test')
+    #     )
+    #     )
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@002fdce3c6a235733a90a27c80493a3241e56863 # v2.12.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Java 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          java-version: "17"
+          distribution: "adopt"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@18ce135bb5112fa8ce4ed6c17ab05699d7f3a5e0 # v3.11.0
+
+      - name: Install Docker Compose
+        run: |
+          sudo curl -SL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: 'pip' # caching pip dependencies
+
+      - name: Pip requirements
+        run: |
+          pip install --require-hashes -r ./testing/cucumber/requirements.txt
+
+      - name: Run Docker Compose Tests
+        run: |
+          chmod +x ./testing/test_webpages.sh
+          chmod +x ./testing/test.sh
+          chmod +x ./testing/test_disabledEndpoints.sh
+          ./testing/test.sh

@@ -1,0 +1,19 @@
+name: Database Migrations Dev
+on:
+  push: # Runs AFTER merge to main (never during PR review!)
+    branches:
+      - main
+  workflow_dispatch: # Allows manual triggering
+jobs:
+  migrate:
+    name: Run Database Migrations
+    runs-on: ubuntu-latest-custom
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+        run: |
+          cd packages/db
+          npx prisma migrate deploy

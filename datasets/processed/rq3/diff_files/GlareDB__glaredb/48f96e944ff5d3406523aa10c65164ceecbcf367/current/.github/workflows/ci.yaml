@@ -1,0 +1,233 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  merge_group:
+
+concurrency:
+  group: build-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# The `if: success() || failure()` stuff is to allow all the SLT tests to run
+# even if another set fails. This provides a bit more feedback to changes as
+# provides more points to triangulate why a change caused a failure.
+#
+# `if: always()` is not used since that causes the step to run even when the
+# workflow is canceled (either manually or from a follow-up push to a pr).
+
+jobs:
+  lint:
+    name: Lint and Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Format
+        run: |
+          rustup toolchain install nightly
+          rustup component add rustfmt --toolchain nightly
+          cargo +nightly fmt --check
+
+      - name: Lint
+        run: cargo clippy --all --all-features -- --deny warnings
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.SSH_KEY }}
+          submodules: 'true'
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Unit tests
+        run: cargo test -- --skip slt/
+
+      - name: SQL Logic Tests (standard)
+        if: success() || failure()
+        run: ./scripts/run_slt_standard.sh
+
+      - name: Extension - tpch_gen (SLT)
+        if: success() || failure()
+        run: cargo test slt/tpch_gen
+
+      - name: Extension - csv (SLT)
+        if: success() || failure()
+        run: cargo test slt/csv
+
+      - name: Extension - parquet (SLT)
+        if: success() || failure()
+        run: cargo test slt/parquet
+
+      - name: Extension - iceberg (SLT)
+        if: success() || failure()
+        run: cargo test slt/iceberg
+
+      - name: File System - HTTP (SLT)
+        if: success() || failure()
+        run: cargo test slt/http
+
+      - name: File System - S3 public (SLT)
+        if: success() || failure()
+        run: cargo test slt/s3/public
+
+      - name: File System - S3 private (SLT)
+        if: success() || failure()
+        env:
+          AWS_KEY: ${{ secrets.AWS_KEY }}
+          AWS_SECRET: ${{ secrets.AWS_SECRET }}
+        run: cargo test slt/s3/private
+
+      - name: File System - GCS public (SLT)
+        if: success() || failure()
+        run: cargo test slt/gcs/public
+
+      - name: File System - GCS private (SLT)
+        if: success() || failure()
+        env:
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+        run: cargo test slt/gcs/private
+
+      - name: Bench (truncated) - ClickBench (single)
+        if: success() || failure()
+        run: |
+          cargo test slt/clickbench/single
+
+      - name: Bench (truncated) - ClickBench (partitioned)
+        if: success() || failure()
+        run: |
+          cargo test slt/clickbench/partitioned
+
+      - name: Bench (truncated) - TPC-H
+        if: success() || failure()
+        run: |
+          cargo test slt/tpchbench
+
+      - name: Run CLI non-interactive
+        if: success() || failure()
+        run: ./scripts/ci_run_cli_non_interactive.sh
+
+      - name: Run example binaries
+        if: success() || failure()
+        run: ./scripts/ci_run_examples.sh
+
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run tests
+        run: ./scripts/ci_run_python_tests.sh
+
+  wasm-tests:
+    name: WebAssembly Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Run tests
+        run: wasm-pack test --firefox --chrome --headless crates/glaredb_wasm
+
+  miri:
+    name: Run Miri
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Miri
+        run: |
+          rustup toolchain install nightly --component miri
+          rustup override set nightly
+          cargo miri setup
+
+      - name: Run Miri
+        run: ./scripts/run_miri.sh
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate code coverage
+        run: cargo llvm-cov -p glaredb_core --lcov --output-path lcov.info
+
+  wasm-build:
+    name: Build WebAssembly
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build wasm
+        run: wasm-pack build crates/glaredb_wasm/ --dev --scope glaredb
+
+  install-script:
+    name: Run Install Script
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install latest
+        run: ./install.sh
+
+      - name: Install specific version
+        env:
+          GLAREDB_VERSION: v0.10.13
+        run: ./install.sh
+

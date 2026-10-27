@@ -1,0 +1,88 @@
+remove execution logic category
+
+add auth step -> artifact integrity validation
+fix version consistency -> version consistency
+Rename Repository Governance -> Project Governance
+All reporting category - > sub label "Workflow reporting" inside project Governance
+runner version upgrade -> Environment tooling update
+package manager version upgrade -> Environment tooling update
+runtime version update version upgrade -> Environment tooling update
+linter version update -> Environment tooling update
+ci/cd platform migration -> Platform migration
+hosting migration -> Platform migration
+Self-hosted Runner Migration -> Platform migration
+package manager migration -> tool migration
+linter migration -> tool migration
+package manager configuration -> Build environment configuration
+cache configuration -> Build environment configuration
+environment config -> Build environment configuration
+runner configuration -> Build environment configuration
+Conditional workflow execution -> Conditional execution configuration
+conditional job execution -> Conditional execution configuration
+monorepo split -> (this has to be figured out, i think it a workflow that is ran only 1 time, just like the database migration workflow , so 3 cases in total where workflow is used only once to do a task like migrating db or monorepo split)
+
+Dependency management
+- Version consistency
+- Action version update
+- Environment tooling update
+- Dependencies expansion
+- dependency configuration
+
+
+Workflow configuration
+- Conditional execution configuration
+- test configuration
+- Build environment configuration
+- Matrix Coverage Expansion
+- runner configuration
+- artifact configuration
+
+Error Fixing
+- package manager fix
+- dependency config fix
+- syntax error
+- test code fix
+- fix step input
+- cache config fix
+
+
+workflow refactoring
+- redundant task removal
+- task decomposition
+- task composition
+- action refactoring
+- renaming
+
+CI Task addition
+- test task addition
+- lint task addition
+- publish & release task addition
+- build task addition
+
+security & restrictions
+- security scan addition
+- resources access restriction
+- artifact integrity validation
+
+
+Performance
+- Build speed optimization
+- build waste optimization
+- caching implementation
+
+Project Governance (repository governance / Collaboration and reporting)
+- Workflow reporting
+- Pull request governance
+- Release notes enrichment
+- documentation addition
+
+Agentic AI integration
+- ai test integration
+- AI repository governance
+- AI review integration
+
+Migration
+- runtime migration
+- Platform migration
+- action migration
+- tool migration

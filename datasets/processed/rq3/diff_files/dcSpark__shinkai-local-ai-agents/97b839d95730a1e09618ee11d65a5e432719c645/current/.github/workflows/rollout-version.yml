@@ -1,0 +1,67 @@
+name: Rollout new version
+
+on:
+  workflow_dispatch:
+    inputs:
+      manual_ref:
+        description: 'Optional: Override selected ref (e.g., 1.0.0)'
+        required: false
+        type: string
+
+jobs:
+  check-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check-tag.outputs.version }}
+    steps:
+      - name: Validate version tag
+        id: check-tag
+        run: |
+          # Use manual ref if provided, otherwise extract from github.ref
+          if [ -n "${{ inputs.manual_ref }}" ]; then
+            REF_NAME="${{ inputs.manual_ref }}"
+          else
+            REF_NAME=$(echo "${{ github.ref }}" | sed 's/refs\/[^\/]*\///')
+          fi
+          
+          # Check if input matches version pattern (e.g., 1.0.0)
+          if ! [[ "$REF_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Selected ref $REF_NAME is not a valid version tag (e.g., 1.0.0)"
+            exit 1
+          fi
+          
+          echo "version=$REF_NAME" >> $GITHUB_OUTPUT
+
+  rollout:
+    needs: check-tag
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install AWS CLI v2 (R2 compatible version)
+        id: install_aws_cli
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.22.25.zip" -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          rm /tmp/awscliv2.zip
+          sudo /tmp/aws/install --update
+          rm -rf /tmp/aws/
+
+      - name: Execute rollout script
+        run: |
+          chmod +x ./scripts/rollout-version.sh
+          ./scripts/rollout-version.sh
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_RULES: ${{ secrets.CLOUDFLARE_RULES }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_RULESET_ID: ${{ secrets.CLOUDFLARE_RULESET_ID }}
+          CLOUDFLARE_AUTH_EMAIL: ${{ secrets.CLOUDFLARE_AUTH_EMAIL }}
+          CLOUDFLARE_AUTH_KEY: ${{ secrets.CLOUDFLARE_AUTH_KEY }}
+          VERSION: ${{ needs.check-tag.outputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }} 

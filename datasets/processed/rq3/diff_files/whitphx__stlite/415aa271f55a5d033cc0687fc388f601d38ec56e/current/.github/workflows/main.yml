@@ -1,0 +1,750 @@
+name: Test, Build, and Publish
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+
+concurrency:
+  # https://stackoverflow.com/a/72408109
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+
+env:
+  python-version-file: ".python-version"
+  node-version-file: ".nvmrc"
+  # To avoid an error like "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory".
+  # See https://github.com/actions/virtual-environments/issues/70#issuecomment-653886422
+  # The Linux VM has 7GB RAM (https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners#supported-runners-and-hardware-resources),
+  # so we set the max memory size as 6.5 GiB like https://nodejs.org/api/cli.html#--max-old-space-sizesize-in-megabytes
+  NODE_OPTIONS: "--max-old-space-size=6656"
+  RUN_ALL_TESTS: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || startsWith(github.ref, 'refs/tags/v') }}
+
+permissions: {}
+
+jobs:
+  changes:  # See https://github.com/dorny/paths-filter#examples
+    runs-on: ubuntu-latest
+    outputs:
+      common: ${{ steps.filter.outputs.common == 'true' || steps.filter.outputs.gha == 'true' || env.RUN_ALL_TESTS == 'true' }}
+      kernel: ${{ steps.filter.outputs.kernel == 'true' || steps.filter.outputs.gha == 'true' || env.RUN_ALL_TESTS == 'true' }}
+      # stlite-lib: ${{ steps.filter.outputs.stlite-lib == 'true' || steps.filter.outputs.gha == 'true' || env.RUN_ALL_TESTS == 'true' }}
+      stlite-lib: true  # This step does not detect changes in the `streamlit` submodule that is needed to trigger the test-stlite-lib job (https://github.com/dorny/paths-filter/issues/143), so skip checking and make it always return true as a workaround.
+      browser: ${{ steps.filter.outputs.browser == 'true' || steps.filter.outputs.gha == 'true' || env.RUN_ALL_TESTS == 'true' }}
+      sharing-editor: ${{ steps.filter.outputs.sharing-editor == 'true' || steps.filter.outputs.gha == 'true' || env.RUN_ALL_TESTS == 'true' }}
+      sharing-common: ${{ steps.filter.outputs.sharing-common == 'true' || steps.filter.outputs.gha == 'true' || env.RUN_ALL_TESTS == 'true' }}
+      desktop: ${{ steps.filter.outputs.desktop == 'true' || steps.filter.outputs.gha == 'true' || env.RUN_ALL_TESTS == 'true' }}
+      vscode-extension: ${{ steps.filter.outputs.vscode-extension == 'true' || steps.filter.outputs.gha == 'true' || env.RUN_ALL_TESTS == 'true' }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dorny/paths-filter@v3
+      id: filter
+      with:
+        filters: |
+          gha:
+            - '.github/workflows/**/*'
+            - '.github/actions/**/*'
+          common:
+            - 'packages/common/**/*'
+          kernel:
+            - 'packages/kernel/**/*'
+            # - '!packages/kernel/py/**/*'  # Not supported by paths-filter now: https://github.com/dorny/paths-filter/issues/106
+          # stlite-lib:  # We run this job anytime. See above.
+          #   - 'packages/kernel/py/stlite-lib/**/*'
+          #   - 'streamlit/**/*'
+          browser:
+            - 'packages/browser/**/*'
+          sharing-editor:
+            - 'packages/sharing-editor/**/*'
+          sharing-common:
+            - 'packages/sharing-common/**/*'
+          desktop:
+            - 'packages/desktop/**/*'
+          vscode-extension:
+            - 'packages/vscode-stlite/**/*'
+
+  test-build-common:
+    needs: changes
+    if: ${{ needs.changes.outputs.common == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: packages/common
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ env.node-version-file }}
+        cache: 'yarn'
+    - run: yarn install --frozen-lockfile
+    - name: Lint
+      run: |
+        yarn check:eslint
+        yarn check:prettier
+    - run: yarn test
+    - run: yarn build
+
+  test-kernel:
+    needs: changes
+    if: ${{ needs.changes.outputs.kernel == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: packages/kernel
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - uses: ./.github/actions/init-all
+      with:
+        python-version-file: ${{ env.python-version-file }}
+        node-version-file: ${{ env.node-version-file }}
+
+    - name: Lint
+      run: |
+        yarn check:eslint
+        yarn check:prettier
+
+    - run: make kernel-test
+      working-directory: .
+
+  test-stlite-lib:
+    needs: changes
+    if: ${{ needs.changes.outputs.stlite-lib == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - uses: ./.github/actions/init-all
+      with:
+        python-version-file: ${{ env.python-version-file }}
+        node-version-file: ${{ env.node-version-file }}
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        . .venv/bin/activate
+        cd packages/kernel/py/stlite-lib
+        uv sync
+
+    - name: Set up Streamlit and build proto
+      run: |
+        . .venv/bin/activate
+        make streamlit-proto
+
+    - name: Run Ruff
+      run: |
+        . .venv/bin/activate
+        cd packages/kernel/py/stlite-lib
+        uv run ruff check --output-format=github .
+        uv run ruff format . --check
+
+    - name: Run pyright
+      run: |
+        . .venv/bin/activate
+        cd packages/kernel/py/stlite-lib
+        uv run pyright
+
+    - name: Run pytest
+      shell: bash
+      run: |
+        . .venv/bin/activate
+        cd packages/kernel/py/stlite-lib
+        uv run pytest -v
+
+  test-browser:
+    needs: changes
+    if: ${{ needs.changes.outputs.browser == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: packages/browser
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ env.node-version-file }}
+        cache: 'yarn'
+    - run: yarn install --frozen-lockfile
+
+    - run: make common
+      working-directory: .
+    - name: Lint
+      run: |
+        yarn check:eslint
+        yarn check:prettier
+    - run: yarn test
+
+  test-sharing-editor:
+    needs: changes
+    if: ${{ needs.changes.outputs.sharing-editor == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: packages/sharing-editor
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - uses: ./.github/actions/init-all
+      with:
+        node-version-file: ${{ env.node-version-file }}
+    - run: make sharing-common
+      working-directory: .
+    - name: Lint
+      run: |
+        yarn check:eslint
+        yarn check:prettier
+    - run: yarn test
+
+  test-sharing-common:
+    needs: changes
+    if: ${{ needs.changes.outputs.sharing-common == 'true' }}
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: packages/sharing-common
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - uses: ./.github/actions/init-all
+      with:
+        node-version-file: ${{ env.node-version-file }}
+
+    - name: Lint
+      run: |
+        yarn check:eslint
+        yarn check:prettier
+    - run: yarn test
+
+  test-desktop:
+    needs: changes
+    if: ${{ needs.changes.outputs.desktop == 'true' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]  # The desktop package contains OS-dependent file paths manipulations differing between POSIX and Windows.
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        working-directory: packages/desktop
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ env.node-version-file }}
+        cache: 'yarn'
+
+    # `yarn install` often takes so long time on in the Windows env.
+    - run: yarn config set network-timeout 600000
+    # About `--ignore-scripts`: Skip the `postinstall` script that runs `patch-package` because it fails on Windows: https://github.com/ds300/patch-package/issues/286
+    # This is a workaround but acceptable as it's only for this testing job.
+    - run: yarn install --frozen-lockfile --ignore-scripts
+    - run: make common
+      working-directory: .
+    - name: Lint
+      if: ${{ matrix.os == 'ubuntu-latest' }}  # The glob pattern passed to ESLint is hardcoded as POSIX, so it does not work on Windows.
+      run: |
+        yarn check:eslint
+        yarn check:prettier
+    - run: yarn typecheck
+    - run: yarn test
+
+  build-browser:
+    if: ${{ ! failure() }}  # This job should run even if the depending jobs are skipped, but not when those jobs failed: https://qiita.com/abetomo/items/d9ede7dbeeb24f723fc5#%E8%A8%AD%E5%AE%9A%E4%BE%8B4
+    needs: [test-kernel, test-stlite-lib, test-browser]
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - uses: ./.github/actions/init-all
+      with:
+        python-version-file: ${{ env.python-version-file }}
+        node-version-file: ${{ env.node-version-file }}
+
+    # PUBLIC_URL here is set as a relative path, which is possible to the trick introduced at https://github.com/whitphx/stlite/pull/143.
+    - name: Set PUBLIC_URL
+      run: echo "PUBLIC_URL=." >> $GITHUB_ENV
+    - name: Build @stlite/browser
+      run: |
+        . .venv/bin/activate
+        make browser
+
+    - name: Package
+      working-directory: packages/browser
+      run: yarn pack
+
+    - name: Get the built package file path
+      id: get-package-file-path
+      working-directory: packages/browser
+      run: echo "PACKAGE_FILE_PATH=$(find $(pwd) -name "stlite-browser-*.tgz" -print -quit)" >> $GITHUB_OUTPUT
+
+    - name: Upload the built tar ball as an artifact
+      uses: actions/upload-artifact@v4
+      if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
+      with:
+        path: ${{ steps.get-package-file-path.outputs.PACKAGE_FILE_PATH }}
+        name: stlite-browser-${{ github.sha }}.tgz
+
+    - name: Upload the built tar ball as an artifact (when pushed with a version tag)
+      uses: actions/upload-artifact@v4
+      if: startsWith(github.ref, 'refs/tags/v')
+      with:
+        path: ${{ steps.get-package-file-path.outputs.PACKAGE_FILE_PATH }}
+        name: stlite-browser-${{ github.ref_name }}.tgz
+
+    - name: "Inform the package stats of @stlite/browser"
+      uses: ./.github/actions/set-package-stats
+      continue-on-error: true
+      with:
+        key: browser
+        name: "@stlite/browser"
+        input-path: ${{ steps.get-package-file-path.outputs.PACKAGE_FILE_PATH }}
+
+    # Also get stats of the built wheel files of stlite-lib and streamlit in this job.
+    - name: Get the built wheel file path
+      id: get-wheel-file-path
+      working-directory:
+      run: |
+        pushd packages/kernel/py/stlite-lib/dist
+        echo "STLITE_LIB_WHEEL_FILEPATH=$(find $(pwd) -name "stlite_lib-*-py3-none-any.whl" -print -quit)" >> $GITHUB_OUTPUT
+        popd
+        pushd packages/kernel/py/streamlit/lib/dist
+        echo "STREAMLIT_WHEEL_FILEPATH=$(find $(pwd) -name "streamlit-*.whl" -print -quit)" >> $GITHUB_OUTPUT
+        popd
+    - name: "Inform the package stats of stlite-lib wheel"
+      uses: ./.github/actions/set-package-stats
+      continue-on-error: true
+      with:
+        key: stlite-lib-wheel
+        name: "stlite-lib wheel (built as a part of @stlite/browser)"
+        input-path: ${{ steps.get-wheel-file-path.outputs.STLITE_LIB_WHEEL_FILEPATH }}
+    - name: "Inform the package stats of streamlit wheel"
+      uses: ./.github/actions/set-package-stats
+      continue-on-error: true
+      with:
+        key: streamlit-wheel
+        name: "streamlit wheel (built as a part of @stlite/browser)"
+        input-path: ${{ steps.get-wheel-file-path.outputs.STREAMLIT_WHEEL_FILEPATH }}
+
+  publish-browser:
+    if: ${{ !failure() && startsWith(github.ref, 'refs/tags/v') }}  # `!failure()` is necessary to avoid skipping this job after successful build: https://github.com/actions/runner/issues/491
+    needs: [build-browser]
+
+    permissions:
+      contents: write  # Necessary for creating releases: https://github.com/softprops/action-gh-release#permissions
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ env.node-version-file }}
+        cache: 'yarn'
+        registry-url: 'https://registry.npmjs.org'
+        scope: '@stlite'
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: stlite-browser-${{ github.ref_name }}.tgz
+        path: packages/browser
+
+    - run: yarn publish stlite-browser-v*.tgz --access public
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      working-directory: packages/browser
+
+    - name: Create a new release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: packages/browser/stlite-browser-v*.tgz
+        generate_release_notes: true
+
+  build-sharing:
+    if: ${{ ! failure() }}  # This job should run even if the depending jobs are skipped, but not when those jobs failed: https://qiita.com/abetomo/items/d9ede7dbeeb24f723fc5#%E8%A8%AD%E5%AE%9A%E4%BE%8B4
+    needs: [test-kernel, test-stlite-lib, test-sharing-common]
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - uses: ./.github/actions/init-all
+      with:
+        python-version-file: ${{ env.python-version-file }}
+        node-version-file: ${{ env.node-version-file }}
+    ## Build and upload @stlite/sharing
+    - name: Set EDITOR_APP_ORIGIN (preview)
+      if: github.ref_name != github.event.repository.default_branch
+      run: echo "EDITOR_APP_ORIGIN_REGEX=^https://[a-z0-9]+\.stlite-sharing-editor\.pages\.dev$" >> $GITHUB_ENV
+    - name: Set EDITOR_APP_ORIGIN (main branch)
+      if: github.ref_name == github.event.repository.default_branch
+      run: echo "EDITOR_APP_ORIGIN=https://edit.share.stlite.net" >> $GITHUB_ENV
+    - name: Build @stlite/sharing
+      run: |
+        . .venv/bin/activate
+        make sharing
+
+    - name: Upload the built directory as an artifact
+      uses: actions/upload-artifact@v4
+      with:
+        path: packages/sharing/build
+        name: stlite-sharing
+
+    - name: "Inform the package stats"
+      uses: ./.github/actions/set-package-stats
+      continue-on-error: true
+      with:
+        key: sharing
+        name: "stlite sharing"
+        input-path: packages/sharing/build
+
+  build-sharing-editor:
+    if: ${{ ! failure() }}  # This job should run even if the depending jobs are skipped, but not when those jobs failed: https://qiita.com/abetomo/items/d9ede7dbeeb24f723fc5#%E8%A8%AD%E5%AE%9A%E4%BE%8B4
+    needs: [test-build-common, test-sharing-editor, test-sharing-common]
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - uses: ./.github/actions/init-all
+      with:
+        node-version-file: ${{ env.node-version-file }}
+
+    - name: Set build option envvar for the preview build
+      if: github.ref_name != github.event.repository.default_branch
+      run: echo "RESOLVE_SHARING_APP_URL_RUNTIME_FROM_EXTERNAL_FILE=true" >> $GITHUB_ENV
+    - name: Set SHARING_APP_URL (main branch)
+      if: github.ref_name == github.event.repository.default_branch
+      run: echo "SHARING_APP_URL=https://share.stlite.net/" >> $GITHUB_ENV
+    - run: make sharing-editor
+
+    - name: Upload the built directory as an artifact
+      uses: actions/upload-artifact@v4
+      with:
+        path: packages/sharing-editor/dist
+        name: stlite-sharing-editor
+
+    - name: "Inform the package stats"
+      uses: ./.github/actions/set-package-stats
+      continue-on-error: true
+      with:
+        key: sharing-editor
+        name: "stlite sharing editor"
+        input-path: packages/sharing-editor/dist
+
+  build-desktop:
+    if: ${{ ! failure() }}  # This job should run even if the depending jobs are skipped, but not when those jobs failed: https://qiita.com/abetomo/items/d9ede7dbeeb24f723fc5#%E8%A8%AD%E5%AE%9A%E4%BE%8B4
+    needs: [test-build-common, test-kernel, test-stlite-lib, test-desktop]
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      pull-requests: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - uses: ./.github/actions/init-all
+      with:
+        python-version-file: ${{ env.python-version-file }}
+        node-version-file: ${{ env.node-version-file }}
+
+    - name: Build @stlite/desktop
+      run: |
+        . .venv/bin/activate
+        make desktop
+
+    - name: Package
+      working-directory: packages/desktop
+      run: yarn pack
+
+    - name: Get the built package file path
+      id: get-package-file-path
+      working-directory: packages/desktop
+      run: echo "PACKAGE_FILE_PATH=$(find $(pwd) -name "stlite-desktop-*.tgz" -print -quit)" >> $GITHUB_OUTPUT
+
+    - name: Upload the built tar ball as an artifact
+      uses: actions/upload-artifact@v4
+      if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
+      with:
+        path: ${{ steps.get-package-file-path.outputs.PACKAGE_FILE_PATH }}
+        name: stlite-desktop-${{ github.sha }}.tgz
+
+    - name: Upload the built tar ball as an artifact (when pushed with a version tag)
+      uses: actions/upload-artifact@v4
+      if: startsWith(github.ref, 'refs/tags/v')
+      with:
+        path: ${{ steps.get-package-file-path.outputs.PACKAGE_FILE_PATH }}
+        name: stlite-desktop-${{ github.ref_name }}.tgz
+
+    - name: "Inform the package stats of @stlite/desktop"
+      uses: ./.github/actions/set-package-stats
+      continue-on-error: true
+      with:
+        key: desktop
+        name: "@stlite/desktop"
+        input-path: ${{ steps.get-package-file-path.outputs.PACKAGE_FILE_PATH }}
+
+  e2e-desktop:
+    if: ${{ ! failure() }}  # This job should run even if the depending jobs are skipped, but not when those jobs failed: https://qiita.com/abetomo/items/d9ede7dbeeb24f723fc5#%E8%A8%AD%E5%AE%9A%E4%BE%8B4
+    needs: [build-desktop]
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ env.node-version-file }}
+
+    - run: cp -r packages/desktop/samples/basic ${{ runner.temp }}/sample_app
+
+    - name: Download artifact into the temp dir
+      uses: actions/download-artifact@v4
+      if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
+      with:
+        name: stlite-desktop-${{ github.sha }}.tgz
+        path: ${{ runner.temp }}/sample_app
+    - name: Download artifact into the temp dir
+      uses: actions/download-artifact@v4
+      if: startsWith(github.ref, 'refs/tags/v')
+      with:
+        name: stlite-desktop-${{ github.ref_name }}.tgz
+        path: ${{ runner.temp }}/sample_app
+
+    - name: Install the tarball
+      run: |
+        mv stlite-desktop-v*.tgz stlite-desktop.tgz
+        npm install file:stlite-desktop.tgz
+      working-directory: ${{ runner.temp }}/sample_app
+
+    - run: yarn dump
+      working-directory: ${{ runner.temp }}/sample_app
+
+    # TODO: Run `yarn serve` and check if the app doesn't show any error.
+
+    - name: Check if electron-builder works
+      run: yarn run app:dir
+      working-directory: ${{ runner.temp }}/sample_app
+
+  publish-desktop:
+    if: ${{ !failure() && startsWith(github.ref, 'refs/tags/v') }}  # `!failure()` is necessary to avoid skipping this job after successful build: https://github.com/actions/runner/issues/491
+    needs: [e2e-desktop]
+
+    permissions:
+      contents: write  # Necessary for creating releases: https://github.com/softprops/action-gh-release#permissions
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ env.node-version-file }}
+        cache: 'yarn'
+        registry-url: 'https://registry.npmjs.org'
+        scope: '@stlite'
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: stlite-desktop-${{ github.ref_name }}.tgz
+        path: packages/desktop
+
+    - run: yarn publish stlite-desktop-v*.tgz --access public
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      working-directory: packages/desktop
+
+    - name: Create a new release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: packages/desktop/stlite-desktop-v*.tgz
+        generate_release_notes: true
+
+  test-build-vscode-extension:
+    needs: changes
+    if: ${{ needs.changes.outputs.vscode-extension == 'true' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+    - uses: actions/setup-node@v4
+      with:
+        node-version-file: ${{ env.node-version-file }}
+        cache: 'yarn'
+    - run: yarn config set network-timeout 300000  # https://github.com/yarnpkg/yarn/issues/8242
+    # About `--ignore-scripts`: Skip the `postinstall` script that runs `patch-package` because it fails on Windows: https://github.com/ds300/patch-package/issues/286
+    # This is a workaround but acceptable as it's only for this testing job.
+    - run: yarn install --frozen-lockfile --ignore-scripts
+    - run: yarn playwright install
+    - run: make common
+    - name: Lint
+      run: |
+        yarn check:eslint
+        yarn check:prettier
+      if: runner.os == 'Linux'
+      working-directory: packages/vscode-stlite
+    - run: xvfb-run -a yarn test
+      if: runner.os == 'Linux'
+      working-directory: packages/vscode-stlite
+    - run: yarn test
+      if: runner.os != 'Linux'
+      working-directory: packages/vscode-stlite
+    - name: Build
+      if: success() && matrix.os == 'ubuntu-latest'
+      run: |
+        if [ $IS_RELEASE = true ]; then
+          VERSION=$(node -p "require('./package.json').version")
+        else
+          VERSION=${{ github.sha }}
+        fi
+        yarn run vsce package -o vscode-stlite-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_NUMBER}.vsix
+      env:
+        IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
+      working-directory: packages/vscode-stlite
+    - name: Upload the vsix built on Linux
+      uses: actions/upload-artifact@v4
+      if: ${{ matrix.os == 'ubuntu-latest' && ! startsWith(github.ref, 'refs/tags/v') }}
+      with:
+        path: packages/vscode-stlite/vscode-stlite*.vsix
+        name: vscode-stlite-${{ github.sha }}.vsix
+    - name: Upload the vsix built on Linux
+      uses: actions/upload-artifact@v4
+      if: ${{ matrix.os == 'ubuntu-latest' && startsWith(github.ref, 'refs/tags/v') }}
+      with:
+        path: packages/vscode-stlite/vscode-stlite*.vsix
+        name: vscode-stlite-${{ github.ref_name }}.vsix
+
+  publish-vscode-extension:
+    if: ${{ !failure() && startsWith(github.ref, 'refs/tags/v') }}  # `!failure()` is necessary to avoid skipping this job after successful build: https://github.com/actions/runner/issues/491
+    needs:
+    - test-build-vscode-extension
+    - publish-browser  # The VSC extension uses the same version of published @stlite/browser, so it must be released in order.
+
+    permissions:
+      contents: write  # Necessary for creating releases: https://github.com/softprops/action-gh-release#permissions
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [marketplace, openvsx]
+
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: vscode-stlite-${{ github.ref_name }}.vsix
+    - run: |
+        files=( vscode-stlite*.vsix )
+        echo "vsix_filename=${files[0]}" >> $GITHUB_ENV
+    - if: matrix.target == 'marketplace'
+      name: Publish to Visual Studio Marketplace
+      uses: HaaLeo/publish-vscode-extension@v1
+      with:
+        extensionFile: "${{ env.vsix_filename }}"
+        pat: ${{ secrets.VSCE_PAT }}
+        registryUrl: https://marketplace.visualstudio.com
+    - if: matrix.target == 'openvsx'
+      name: Publish to Open VSX Registry
+      uses: HaaLeo/publish-vscode-extension@v1
+      with:
+        extensionFile: "${{ env.vsix_filename }}"
+        pat: ${{ secrets.OPEN_VSX_TOKEN }}
+    - if: matrix.target == 'marketplace'
+      name: Create a new release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: "${{ env.vsix_filename }}"
+        generate_release_notes: true
+
+  set-cloudflare-pages-info:
+    needs: [build-sharing, build-sharing-editor]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Save deployment info (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "${{ github.event.pull_request.head.ref }}" > branch
+          echo "${{ github.event.pull_request.head.sha }}" > commit-hash
+          echo "${{ github.event.pull_request.number }}" > pr-number
+      - name: Save deployment info (push to a branch)
+        if: github.event_name == 'push' && github.ref_type == 'branch'
+        run: |
+          echo "${{ github.ref_name }}" > branch
+          echo "${{ github.sha }}" > commit-hash
+          echo "" > pr-number
+      - name: Upload deployment info
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-pages-info
+          path: |
+            branch
+            commit-hash
+            pr-number

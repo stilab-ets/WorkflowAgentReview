@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Validate Pull Request
+
+on:
+  pull_request:
+    branches: [main, "release/**"]
+  merge_group:
+
+# Cancels old running job if a new one is triggered (e.g. by a push onto the same branch).
+# This will cancel dependent jobs as well, such as dep_rust and dep_fuzzing
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true    
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  docs-pr:
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.docs-only.outputs.result }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            docs:
+              - '**/*.md'
+              - '**/*.txt'
+            all:
+              - '**/*'
+      - uses: actions/github-script@v7
+        id: docs-only
+        with:
+          script: |
+            let docs_file_count = ${{steps.changes.outputs.docs_count}};
+            let all_file_count = ${{steps.changes.outputs.all_count}};
+            return all_file_count === docs_file_count;
+          result-encoding: string
+
+  rust:
+    needs:
+      - docs-pr
+    uses: ./.github/workflows/dep_rust.yml
+    secrets: inherit
+    with: 
+      docs_only: ${{needs.docs-pr.outputs.docs-only}}
+
+  fuzzing:
+    needs:
+      - docs-pr
+    uses: ./.github/workflows/dep_fuzzing.yml
+    with:
+      targets: '["fuzz_host_print", "fuzz_guest_call", "fuzz_host_call"]' # Pass as a JSON array
+      max_total_time: 300 # 5 minutes in seconds
+      docs_only: ${{needs.docs-pr.outputs.docs-only}}
+    secrets: inherit
+
+  spelling:
+    name: spell check with typos
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Spell Check Repo
+      uses: crate-ci/typos@v1.32.0
+
+  license-headers:
+    name: check license headers
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Check License Headers
+      run: ./dev/check-license-headers.sh
+
+  # Gate PR merges on this specific "join-job" which requires all other
+  # jobs to run first. We need this job since we cannot gate on particular jobs
+  # in the workflow, since they can sometimes be skipped (e.g. if the PR only touches docs).
+  # This step fixes this issue by always running.
+  report-ci-status:
+    needs:
+      - docs-pr
+      - rust
+      - fuzzing
+      - spelling
+      - license-headers
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Previous jobs succeeded
+      if: ${{ !(contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
+      run: exit 0
+    - name: Previous jobs failed
+      if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+      run: exit 1

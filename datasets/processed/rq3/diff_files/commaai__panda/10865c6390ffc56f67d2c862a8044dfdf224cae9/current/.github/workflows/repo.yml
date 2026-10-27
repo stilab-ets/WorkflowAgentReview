@@ -1,0 +1,29 @@
+name: repo
+
+on:
+  schedule:
+    - cron: "0 15 1 * *"
+  workflow_dispatch:
+
+jobs:
+  pre-commit-autoupdate:
+    name: pre-commit autoupdate
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup
+      run: ./setup.sh
+    - name: pre-commit autoupdate
+      run: |
+        git config --global --add safe.directory '*'
+        source .venv/bin/activate
+        pre-commit autoupdate
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@f689536846d983d7c4f399cd9b789c38c963aaca
+      with:
+        token: ${{ secrets.ACTIONS_CREATE_PR_PAT }}
+        commit-message: Update pre-commit hook versions
+        title: 'pre-commit: autoupdate hooks'
+        branch: pre-commit-updates
+        base: master
+        delete-branch: true

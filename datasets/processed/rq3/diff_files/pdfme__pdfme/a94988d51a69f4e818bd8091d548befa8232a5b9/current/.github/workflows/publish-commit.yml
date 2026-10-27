@@ -1,0 +1,67 @@
+# .github/workflows/publish-commit.yml
+name: Publish Commit
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Increment version and append git hash
+        run: ./scripts/increment-version.sh
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set NPM version
+        run: npm version --no-git-tag-version $VERSION --workspaces
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm run test
+        env:
+          CI: true
+
+      - name: Publish to NPM
+        run: npm publish --workspaces --access public --tag dev
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  playground-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+
+      - name: Install dependencies and build project
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run playground tests
+        run: |
+          cd playground
+          npm install
+          npm run build
+          npm run test
+        env:
+          CI: true

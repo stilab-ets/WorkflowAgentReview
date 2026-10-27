@@ -1,0 +1,54 @@
+name: Publish gem to rubygems.org
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  push:
+    if: github.repository == 'shugo/textbringer'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: rubygems.org
+      url: https://rubygems.org/gems/textbringer
+
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      # Set up
+      - name: Harden Runner
+        uses: step-security/harden-runner@6c439dc8bdf85cadbbce9ed30d1c7b959517bc49 # v2.12.2
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+          ruby-version: ruby
+
+      # Release
+      - name: Publish to RubyGems
+        uses: rubygems/release-gem@v1
+
+      - name: Create GitHub release
+        run: |
+          tag_name="$(git describe --tags --abbrev=0)"
+          gh release create "${tag_name}" --verify-tag --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Purge GitHub cache
+        shell: bash
+        run: |
+          urls=$(curl -sL "https://github.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/tree/main" | grep -Eo "(http|https)://camo.githubusercontent.com[a-zA-Z0-9./?=_%:-]*")
+          while IFS= read -r url; do echo -e "\nPurge $url"; curl -X PURGE "$url"; done <<< "$urls"

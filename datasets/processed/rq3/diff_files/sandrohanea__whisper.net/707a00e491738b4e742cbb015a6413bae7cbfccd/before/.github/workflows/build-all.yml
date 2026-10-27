@@ -1,0 +1,133 @@
+# This workflow will build a .NET project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-net
+
+name: CI (Native + dotnet)
+permissions:
+  contents: read
+  checks: write
+  security-events: write
+
+on:
+   push:
+      branches: ["main"]
+   pull_request:
+      branches: ["main"]
+   workflow_dispatch:
+      inputs:
+         BuildCuda:
+            description: 'Enable CUDA runtimes libraries build.'
+            required: true
+            default: 'false'
+         BuildConfig:
+            description: 'The configuration to be used.'
+            required: true
+            default: 'Release'
+   schedule:
+     - cron: '40 17 * * 0'
+
+jobs:
+   codeql-github-actions:
+      uses: ./.github/workflows/codeql-github-actions.yml
+
+   android:
+      uses: ./.github/workflows/android-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   macos:
+      uses: ./.github/workflows/macos-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   windows:
+      uses: ./.github/workflows/windows-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   windows-no-avx:
+      uses: ./.github/workflows/windows-noavx-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   wasm:
+      uses: ./.github/workflows/wasm-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   linux:
+      uses: ./.github/workflows/linux-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   linux-no-avx:
+      uses: ./.github/workflows/linux-noavx-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   linux-vulkan:
+      uses: ./.github/workflows/linux-vulkan-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   windows-cuda:
+      if: ${{ inputs.BuildCuda == 'true' }}
+      uses: ./.github/workflows/windows-cuda-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   windows-vulkan:
+      uses: ./.github/workflows/windows-vulkan-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   windows-openvino:
+      uses: ./.github/workflows/windows-openvino-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   linux-cuda:
+      if: ${{ inputs.BuildCuda == 'true' }}
+      uses: ./.github/workflows/linux-cuda-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   linux-openvino:
+      uses: ./.github/workflows/linux-openvino-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   macos-coreml:
+      uses: ./.github/workflows/macos-coreml-native-build.yml
+      with:
+         BuildConfig: ${{ inputs.BuildConfig || 'Release'}}
+
+   dotnet-noavx:
+     needs:
+       - windows-no-avx
+       - linux-no-avx
+     uses: ./.github/workflows/dotnet-noavx.yml
+     secrets: inherit
+
+   dotnet-build:
+      needs:
+         - android
+         - macos
+         - windows
+         - wasm
+         - linux
+         - windows-vulkan
+         - linux-vulkan
+         - windows-openvino
+         - linux-openvino
+      uses: ./.github/workflows/dotnet.yml
+      secrets: inherit
+
+   dotnet-maui-build-and-test:
+      needs:
+         - android
+         - macos
+         - windows
+         - wasm
+         - linux
+      uses: ./.github/workflows/dotnet-maui.yml
+      secrets: inherit

@@ -1,0 +1,54 @@
+name: Deploy to staging
+
+on:
+  push:
+    branches:
+      - "r/*"
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_OPTIONS: "--max-old-space-size=8192"
+  FLY_API_TOKEN: ${{ secrets.STG_FLY_API_TOKEN }}
+  CP_WEB_URL: https://cloud.reflexcorp.run/
+  CP_BACKEND_URL: https://cloud-29f4f535-4fb8-48b9-8b55-2000f2782aee.fly.dev/
+  TYPESENSE_HOST: ${{ secrets.STG_TYPESENSE_HOST }}
+  TYPESENSE_SEARCH_API_KEY: ${{ secrets.STG_TYPESENSE_SEARCH_API_KEY }}
+
+jobs:
+  deploy:
+    name: Deploy to Reflex Cloud
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          activate-environment: true
+
+      - name: Install the project
+        run: uv sync --locked --no-dev
+
+      - name: Update Reflex CLI
+        run: uv pip install reflex-hosting-cli -U
+
+      - name: Index documentation to Typesense
+        env:
+          TYPESENSE_ADMIN_API_KEY: ${{ secrets.STG_TYPESENSE_ADMIN_API_KEY }}
+          TYPESENSE_HOST: ${{ secrets.STG_TYPESENSE_HOST }}
+        run: |
+          uv pip install typesense python-frontmatter markdown beautifulsoup4
+          python scripts/typesense_indexer.py --force
+
+      - name: Deploy to Reflex
+        id: deploy
+        run: |
+          reflex deploy --project ${{ secrets.STG_PROJECT_ID }} --token ${{ secrets.STG_TOKEN }} --no-interactive

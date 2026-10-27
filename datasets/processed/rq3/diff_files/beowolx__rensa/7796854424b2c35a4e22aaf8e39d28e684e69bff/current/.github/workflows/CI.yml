@@ -1,0 +1,331 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - "*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            target: x86_64
+          - runner: ubuntu-latest
+            target: x86
+          - runner: ubuntu-latest
+            target: aarch64
+          - runner: ubuntu-latest
+            target: armv7
+          - runner: ubuntu-latest
+            target: s390x
+          - runner: ubuntu-latest
+            target: ppc64le
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          manylinux: auto
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.platform.target }}
+          path: dist
+
+  musllinux:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            target: x86_64
+          - runner: ubuntu-latest
+            target: x86
+          - runner: ubuntu-latest
+            target: aarch64
+          - runner: ubuntu-latest
+            target: armv7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+          manylinux: musllinux_1_2
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-musllinux-${{ matrix.platform.target }}
+          path: dist
+
+  windows:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: windows-latest
+            target: x64
+          - runner: windows-latest
+            target: x86
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+          architecture: ${{ matrix.platform.target }}
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.platform.target }}
+          path: dist
+
+  macos:
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      matrix:
+        platform:
+          - runner: macos-14
+            target: x86_64
+          - runner: macos-14
+            target: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+      - name: Build wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist --find-interpreter
+          sccache: "true"
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.platform.target }}
+          path: dist
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  performance-check:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Prepare Python Environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install maturin
+          pip install -r requirements.txt
+
+      - name: Build & Install Rensa Locally
+        shell: bash
+        run: |
+          source .venv/bin/activate
+          maturin develop --release
+
+      - name: Run Benchmark
+        shell: bash
+        run: |
+          source .venv/bin/activate
+          python benchmarks/simple_benchmark.py > benchmark_log.txt
+          cat benchmark_log.txt
+
+      - name: Enforce Performance and Jaccard Similarity
+        shell: bash
+        run: |
+          set -e
+          set -o pipefail
+
+          # Helper function to check performance
+          check_performance() {
+            local method_name="$1"
+            local reference_name="$2"
+            local min_speedup="$3"
+            local speedup
+
+            echo "Checking performance: ${method_name} vs ${reference_name} (min speedup: ${min_speedup}x)"
+
+            # Parse from the detailed performance table
+            local table_line
+            table_line=$(grep "^${method_name}[ ]*[0-9]*\.[0-9]*[ ]*[0-9]*\.[0-9]*[ ]*x" benchmark_log.txt | head -1 || true)
+            
+            if [ -z "$table_line" ]; then
+              echo "FAILURE: Could not find performance table line for ${method_name}."
+              exit 1
+            fi
+            
+            echo "Detected table line: $table_line"
+            # Extract speedup vs Datasketch from the table (third column)
+            speedup=$(echo "$table_line" | awk '{print $3}' | sed 's/x$//')
+            
+            if [ -z "$speedup" ]; then
+              echo "FAILURE: Could not parse speedup for ${method_name} from table line: $table_line"
+              exit 1
+            fi
+            echo "${method_name} speedup over ${reference_name} = $speedup"
+
+            if (( $(echo "$speedup < $min_speedup" | bc -l) )); then
+              echo "FAILURE: ${method_name} is only ${speedup}x faster than ${reference_name} (Requirement: >= ${min_speedup}x)."
+              exit 1
+            else
+              echo "SUCCESS: ${method_name} is ${speedup}x faster than ${reference_name} (Requirement: >= ${min_speedup}x)."
+            fi
+          }
+
+          # Helper function to check Jaccard similarity
+          check_jaccard() {
+            local method1_name="$1"
+            local method2_name="$2"
+            local min_expected_jaccard="$3"
+            local jaccard_line
+            local jaccard
+
+            echo "Checking Jaccard similarity: ${method1_name} vs ${method2_name} (min expected: ${min_expected_jaccard})"
+
+            jaccard_line=$(grep "Jaccard similarity between ${method1_name} and ${method2_name}:" benchmark_log.txt || true)
+            
+            if [ -z "$jaccard_line" ]; then
+                # Try reversed order if the benchmark might print it that way
+                jaccard_line=$(grep "Jaccard similarity between ${method2_name} and ${method1_name}:" benchmark_log.txt || true)
+            fi
+
+            if [ -z "$jaccard_line" ]; then
+                echo "FAILURE: Could not find Jaccard similarity line for ${method1_name} vs ${method2_name}."
+                exit 1
+            fi
+
+            echo "Detected Jaccard line: $jaccard_line"
+            jaccard=$(echo "$jaccard_line" | awk '{print $NF}')
+            
+            if [ -z "$jaccard" ]; then
+                echo "FAILURE: Could not parse Jaccard similarity for ${method1_name} vs ${method2_name} from line: $jaccard_line"
+                exit 1
+            fi
+            echo "Parsed Jaccard for ${method1_name} vs ${method2_name} = $jaccard"
+
+            if (( $(echo "$jaccard < $min_expected_jaccard" | bc -l) )); then
+              echo "FAILURE: Jaccard similarity for ${method1_name} vs ${method2_name} is ${jaccard}, expected >= ${min_expected_jaccard}."
+              exit 1
+            else
+              echo "SUCCESS: Jaccard similarity for ${method1_name} vs ${method2_name} is ${jaccard} (>= ${min_expected_jaccard})."
+            fi
+          }
+          
+          source .venv/bin/activate
+          
+          echo "--- Validating benchmark_log.txt content ---"
+          if [ ! -f benchmark_log.txt ]; then
+            echo "benchmark_log.txt not found!"
+            exit 1
+          fi
+          echo "benchmark_log.txt first 10 and last 20 lines:"
+          head -n 10 benchmark_log.txt
+          echo "..."
+          tail -n 30 benchmark_log.txt # Increased tail for more context on Jaccard/Perf sections
+          echo "--- End of benchmark_log.txt preview ---"
+
+          # Performance checks (against Datasketch, >= 10.0x)
+          check_performance "R-MinHash" "Datasketch" 10.0
+          check_performance "C-MinHash" "Datasketch" 10.0
+          
+          # Jaccard similarity checks
+          echo "--- Checking Jaccard Similarities vs Datasketch ---"
+          check_jaccard "Datasketch" "R-MinHash" 1.0
+          check_jaccard "Datasketch" "C-MinHash" 0.9
+          
+          echo "--- Checking Jaccard Similarities Among Implemented Methods ---"
+          # Assuming R-MinHash vs C-MinHash should also be >= 0.9, adjust if necessary
+          check_jaccard "R-MinHash" "C-MinHash" 0.9 
+
+          echo "All performance and Jaccard similarity checks passed successfully!"
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          
+      - name: Build & Install Rensa
+        run: |
+          source .venv/bin/activate
+          maturin develop --release
+        
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          pytest tests/
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: "startsWith(github.ref, 'refs/tags/')"
+    needs: [linux, musllinux, windows, macos, sdist, performance-check, test]
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Publish to PyPI
+        uses: PyO3/maturin-action@v1
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        with:
+          command: upload
+          args: --non-interactive --skip-existing wheels-*/*

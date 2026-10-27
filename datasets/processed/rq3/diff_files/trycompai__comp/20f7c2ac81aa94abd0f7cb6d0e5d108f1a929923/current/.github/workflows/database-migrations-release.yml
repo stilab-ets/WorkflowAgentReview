@@ -1,0 +1,19 @@
+name: Database Migrations Prod
+on:
+  push: # Runs AFTER merge to release (never during PR review!)
+    branches:
+      - release
+  workflow_dispatch: # Allows manual triggering
+jobs:
+  migrate:
+    name: Run Database Migrations
+    runs-on: self-hosted
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Apply database migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+        run: |
+          cd packages/db
+          npx prisma migrate deploy

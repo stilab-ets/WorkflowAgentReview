@@ -1,0 +1,33 @@
+name: Update GitHub Discussions JSON
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # Runs every 6 hours
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  update-discussions:
+    runs-on: ubuntu-latest
+    environment: "main"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.UPDATE_DOCS_MAIN_BRANCH_PAT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Run load_github_discussions.py
+        env:
+          GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uv run --with requests --python 3.11 -- python scripts/load_github_discussions.py
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add src/langfuse_github_discussions.json public/github-discussions-sitemap.xml
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update GitHub discussions JSON and sitemap" && git push origin ${GITHUB_REF#refs/heads/})

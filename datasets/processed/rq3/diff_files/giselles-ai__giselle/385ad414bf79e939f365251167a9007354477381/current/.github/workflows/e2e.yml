@@ -1,0 +1,26 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0,9 * * 1-5" # Weekdays 9:00 and 18:00 JST
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'pnpm'
+      - run: pnpm install
+      - name: Run e2e tests
+        run: pnpm test:e2e
+        working-directory: apps/studio.giselles.ai
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_LOGIN_EMAIL: ${{ secrets.PLAYWRIGHT_LOGIN_EMAIL }}
+          PLAYWRIGHT_LOGIN_PASSWORD: ${{ secrets.PLAYWRIGHT_LOGIN_PASSWORD }}

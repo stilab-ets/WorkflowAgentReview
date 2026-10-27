@@ -1,0 +1,80 @@
+name: Test CLI
+
+on:
+  workflow_call:
+    inputs:
+      sdk-version:
+        description: "Dart SDK version"
+        type: string
+        required: false
+        default: "3.1.3"
+
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - "CHANGELOG.md"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
+        with:
+          sdk-version: ${{ github.event.inputs.sdk-version }}
+
+      - uses: invertase/github-action-dart-analyzer@v1
+        with:
+          fatal-infos: false
+  
+      - name: Install DCM
+        uses: CQLabs/setup-dcm@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+  
+      - name: Run DCM
+        run: dcm analyze lib
+      
+      - name: Install lcov
+        run: sudo apt-get install lcov
+
+      - name: Run tests
+        uses: ./.github/actions/test
+        with:
+          with-coverage: 'true'
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+
+  test-os:
+    name: Test on ${{ matrix.os }}
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+
+    steps:        
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
+        with:
+          sdk-version: ${{ github.event.inputs.sdk-version }}
+
+      - name: Tests
+        uses: ./.github/actions/test
