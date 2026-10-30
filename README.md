@@ -12,7 +12,7 @@ python -m pip install -r requirements.txt
 
 ### 1.2 Required AIDev dataset
 
-Use the study's AIDev-Pop snapshot from [AIDev](https://huggingface.co/datasets/hao-li/AIDev/blob/main/README.md). Place the seven Parquet files listed below in `datasets/aidev/`. The exact upstream revision used by this study is not recorded; the latest release may differ. The notebooks expect the study filename `pr_review_comments_v2.parquet`.
+Use the study's AIDev-Pop snapshot from [AIDev](https://huggingface.co/datasets/hao-li/AIDev/blob/main/README.md). Place the seven Parquet files listed below in `datasets/aidev/`. . The notebooks expect the study filename `pr_review_comments_v2.parquet`.
 
 The AIDev Parquet files must be obtained separately. The three raw JSONL files and `datasets/processed/fetched_eligible_pop_commits.csv` are included through [Git LFS](https://git-lfs.com/). With Git LFS installed, run these commands from the repository root after cloning to download their contents:
 
